@@ -16,6 +16,7 @@ PWA (Progressive Web App) simples para controlar os gastos do mês, separados po
 | **Pagamentos / estornos (−)** | São **subtraídos** do total (ex.: um estorno, ou um pagamento parcial da fatura). |
 | **Compras parceladas** | Ao lançar um gasto, escolha de 1x a 48x. O app cria uma parcela em cada mês (mesmo dia; se o mês for mais curto, usa o último dia) e mostra a prévia antes de salvar, ex.: "10x de R$ 350,00". Dá para digitar o **total da compra** ou o **valor de cada parcela**. |
 | **Assinaturas** | Cadastre cobranças mensais (streaming, academia, celular…) com valor, dia, cartão e categoria. O app lança sozinho a cobrança de cada mês, e dá para pausar, editar ou excluir. |
+| **Fechamento da fatura** | Cada cartão pode ter um dia de fechamento. Compras feitas a partir desse dia entram automaticamente na fatura do mês seguinte (parcelas e assinaturas também). |
 | **Gráfico** | Gráfico de rosca + barras com a divisão dos gastos por **categoria** ou por **cartão** (alternável), com valor e porcentagem. |
 | **Navegação por mês** | Setas no topo para ver meses anteriores/futuros; cada mês tem seu próprio total. |
 | **Editar / excluir** | Cada lançamento tem um botão de **lápis** (editar) e de **lixeira** (excluir). Na tela de edição também há o botão **Excluir**. |
@@ -77,7 +78,7 @@ Consequências:
 - **Editar uma parcela:** valor e data mudam só nela; descrição, cartão e categoria podem ser aplicados a todas as parcelas (opção marcada por padrão).
 - **Excluir:** o app pergunta se é para apagar a **compra inteira** ou **só aquela parcela**.
 - Um gasto lançado à vista pode virar parcelado: edite e escolha o número de parcelas.
-- A 1ª parcela cai no mês da data da compra. O app não considera a data de fechamento da fatura; se a compra caiu na próxima fatura, ajuste a data.
+- Se o cartão tem dia de fechamento, cada parcela entra na fatura certa (ex.: compra em 27/10 num cartão que fecha dia 20 → parcelas nas faturas de nov, dez, jan…).
 
 ### Assinaturas
 
@@ -90,6 +91,17 @@ Em **Configurações → Assinaturas → + Nova assinatura**, informe nome, valo
 - **Excluir**: as cobranças até o mês atual continuam no histórico; as de meses futuros são removidas.
 - Apagar a cobrança de um mês específico (lixeira na lista) não faz ela voltar — o app lembra quais meses já lançou.
 - O extrato em PDF leva as assinaturas junto, então o **Importar** também as traz para outro aparelho.
+
+### Dia de fechamento do cartão
+
+Em **Configurações → Cartões**, cada cartão tem um campo **Fecha dia N** (ou **Sem fechamento** para conta corrente/débito). Também dá para escolher ao adicionar um cartão novo.
+
+- Compra feita **antes** do dia de fechamento → entra na fatura do próprio mês.
+- Compra feita **no dia do fechamento ou depois** → entra na fatura do **mês seguinte**.
+- Ao lançar, o app avisa: *"Entra na fatura de novembro (Nubank fecha dia 20)"*, e depois de salvar já mostra aquele mês.
+- O "mês" do app, para cartões com fechamento, é o mês da **fatura** — o total do topo é o valor daquela fatura. A lista continua mostrando a data real da compra.
+- Ao configurar ou mudar o fechamento de um cartão, as compras dele **do mês passado em diante** são recalculadas; faturas mais antigas ficam como estão.
+- Se o fechamento for num dia que o mês não tem (ex.: 30 em fevereiro), vale o último dia do mês.
 
 ### Como o total é calculado
 
@@ -149,6 +161,7 @@ Não há build nem framework. O gráfico é desenhado em SVG puro. A única depe
 ```
 
 - `type`: `"gasto"` (soma) ou `"pagamento"` (subtrai).
+- `bill`: mês da fatura (`AAAA-MM`) em que o lançamento entra, calculado pelo dia de fechamento do cartão. Lançamentos antigos sem `bill` usam o mês da data.
 - `sub` (só em cobranças de assinatura): id da assinatura que gerou o lançamento.
 - `inst` (só em parcelas): `{ "id": "<id da compra>", "n": 2, "of": 10 }` — parcela 2 de 10. Cada parcela é um lançamento próprio, no seu mês.
 - `date`: formato `AAAA-MM-DD`; é usada para separar os lançamentos por mês.

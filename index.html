@@ -153,6 +153,11 @@
   .swatch::-webkit-color-swatch { border: 2px solid var(--line); border-radius: 10px; }
   .swatch::-moz-color-swatch { border: 2px solid var(--line); border-radius: 10px; }
   .manage-list .rename { flex: 1; min-width: 0; padding: 8px 10px; background: transparent; border-color: transparent; }
+  .bill-hint { color: var(--accent); font-weight: 600; }
+  .bill-hint:empty { display: none; }
+  .manage-list .mcol { flex: 1; min-width: 0; display: grid; gap: 2px; }
+  .manage-list .closing { font-size: 13px; padding: 4px 8px; color: var(--muted); background: var(--bg); }
+  #manageClosingWrap[hidden] { display: none; }
   .manage-list .rename:hover, .manage-list .rename:focus { border-color: var(--line); background: var(--bg); }
   .manage-hint { margin: -4px 0 0; color: var(--muted); font-size: 12px; }
   .add-inline { display: flex; gap: 8px; }
@@ -288,6 +293,7 @@
       <label>Cartão/Conta<select name="card" required></select></label>
       <label>Categoria<select name="cat" required></select></label>
     </div>
+    <p class="manage-hint bill-hint" id="billHint"></p>
     <div class="inst-box" id="instRow">
       <div class="row2">
         <label>Parcelas<select name="parcelas"></select></label>
@@ -314,8 +320,9 @@
 <dialog id="manageDialog">
   <form class="sheet" method="dialog" id="manageForm">
     <h3 id="manageTitle" tabindex="-1" autofocus></h3>
-    <p class="manage-hint">Toque na cor para trocá-la e no nome para renomear.</p>
+    <p class="manage-hint" id="manageHint"></p>
     <div class="manage-list" id="manageList"></div>
+    <label id="manageClosingWrap">Fechamento da fatura do novo cartão<select id="manageClosing"></select></label>
     <div class="add-inline">
       <input id="manageName" placeholder="Nome">
       <input id="manageColor" class="swatch" type="color" value="#d00a2a">
@@ -403,7 +410,7 @@ let view = { y: now.getFullYear(), m: now.getMonth(), by: 'cat' };
 let editingId = null;
 
 const monthKey = () => `${view.y}-${String(view.m + 1).padStart(2, '0')}`;
-const monthTx = () => state.tx.filter(t => t.date.startsWith(monthKey()));
+const monthTx = () => state.tx.filter(t => billKey(t) === monthKey());
 const signed = t => t.type === 'pagamento' ? -t.amount : t.amount;
 const find = (list, id) => list.find(x => x.id === id) || { name: '(removido)', color: '#94a3b8' };
 
@@ -510,6 +517,26 @@ function addMonths(date, k) {
   return `${first.getFullYear()}-${String(first.getMonth() + 1).padStart(2, '0')}-${String(Math.min(d, last)).padStart(2, '0')}`;
 }
 
+// ---------- fatura (dia de fechamento do cartão) ----------
+// t.bill = mês da fatura (AAAA-MM) em que a compra entra. Compras feitas a partir do dia de
+// fechamento vão para a fatura do mês seguinte. Lançamentos antigos sem t.bill usam o mês da data.
+function billOf(cardId, date) {
+  const k = date.slice(0, 7);
+  const c = state.cards.find(x => x.id === cardId);
+  if (!c?.closing) return k;
+  const [y, m, d] = date.split('-').map(Number);
+  return d >= Math.min(c.closing, new Date(y, m, 0).getDate()) ? nextKey(k) : k;
+}
+const billKey = t => t.bill || t.date.slice(0, 7);
+const withBill = t => Object.assign(t, { bill: billOf(t.card, t.date) });
+
+// ao mudar o fechamento, recalcula as compras desse cartão a partir do mês passado
+// (fatura atual em aberto e as próximas); faturas mais antigas ficam como estão
+function rebillCard(cardId) {
+  const from = addMonths(`${nowKey()}-01`, -1);
+  state.tx.forEach(t => { if (t.card === cardId && t.date >= from) withBill(t); });
+}
+
 // divide em centavos: a diferença do arredondamento vai para as primeiras parcelas
 function splitInstallments(amount, n, mode) {
   const totalCents = mode === 'parcela' ? Math.round(amount * 100) * n : Math.round(amount * 100);
@@ -519,9 +546,9 @@ function splitInstallments(amount, n, mode) {
 
 function createInstallments(data, n, mode) {
   const group = uid(), now = Date.now();
-  splitInstallments(data.amount, n, mode).forEach((amount, i) => state.tx.push({
+  splitInstallments(data.amount, n, mode).forEach((amount, i) => state.tx.push(withBill({
     ...data, id: uid(), created: now + i, amount, date: addMonths(data.date, i), inst: { id: group, n: i + 1, of: n },
-  }));
+  })));
 }
 
 function deleteTx(id) {
@@ -573,7 +600,7 @@ function openTx(t) {
     $('#instInfo').innerHTML = `Parcela <b>${t.inst.n} de ${t.inst.of}</b> · compra de ${brl(all.reduce((s, x) => s + x.amount, 0))}` +
       `<br><small>Valor e data mudam só nesta parcela.</small>`;
   }
-  updateInstUI();
+  updateInstUI(); updateBillHint();
   txDialog.showModal();
   if (!t) txForm.desc.focus();
 }
@@ -594,12 +621,21 @@ function updateInstUI() {
   const parts = splitInstallments(amount, n, txForm.valmode.value);
   const total = parts.reduce((s, v) => s + v, 0);
   const even = parts.every(v => v === parts[0]);
-  const date = txForm.date.value;
+  const date = txForm.date.value, card = txForm.card.value;
+  const firstBill = date && `${billOf(card, date)}-01`, lastBill = date && `${billOf(card, addMonths(date, n - 1))}-01`;
   $('#instPreview').innerHTML = `<b>${n}x de ${brl(parts[0])}</b>${even ? '' : ' (aprox.)'} = ${brl(total)}` +
-    (date ? `<br><small>De ${shortMonth(date)} a ${shortMonth(addMonths(date, n - 1))}, uma parcela por mês</small>` : '');
+    (date ? `<br><small>Faturas de ${shortMonth(firstBill)} a ${shortMonth(lastBill)}, uma parcela por mês</small>` : '');
+}
+
+// avisa quando a compra cai na fatura do mês seguinte por causa do fechamento
+function updateBillHint() {
+  const date = txForm.date.value, c = state.cards.find(x => x.id === txForm.card.value);
+  const bill = date && billOf(txForm.card.value, date);
+  $('#billHint').textContent = bill && bill !== date.slice(0, 7)
+    ? `Entra na fatura de ${monthTitle(bill).toLowerCase()} (${c.name} fecha dia ${c.closing}).` : '';
 }
 ['input', 'change'].forEach(ev => txForm.addEventListener(ev, e => {
-  if (['amount', 'parcelas', 'valmode', 'date', 'type'].includes(e.target.name)) updateInstUI();
+  if (['amount', 'parcelas', 'valmode', 'date', 'type', 'card'].includes(e.target.name)) { updateInstUI(); updateBillHint(); }
 }));
 
 txForm.addEventListener('submit', e => {
@@ -609,12 +645,13 @@ txForm.addEventListener('submit', e => {
     desc: txForm.desc.value.trim(), amount, date: txForm.date.value,
     type: txForm.type.value, card: txForm.card.value, cat: txForm.cat.value,
   };
+  data.bill = billOf(data.card, data.date);
   const n = data.type === 'gasto' ? +txForm.parcelas.value || 1 : 1;
   const current = editingId && state.tx.find(t => t.id === editingId);
   if (current?.inst) {
     // parcela existente: valor/data só nesta; descrição/cartão/categoria opcionalmente em todas
     Object.assign(current, data);
-    if (txForm.applyAll.checked) siblings(current).forEach(x => Object.assign(x, { desc: data.desc, card: data.card, cat: data.cat }));
+    if (txForm.applyAll.checked) siblings(current).forEach(x => withBill(Object.assign(x, { desc: data.desc, card: data.card, cat: data.cat })));
   } else if (n > 1) {
     // compra nova parcelada (ou um gasto à vista que virou parcelado na edição)
     if (current) state.tx = state.tx.filter(t => t.id !== current.id);
@@ -622,7 +659,8 @@ txForm.addEventListener('submit', e => {
   } else if (current) Object.assign(current, data);
   else state.tx.push({ id: uid(), created: Date.now(), ...data });
   state.lastCard = data.card;
-  const [y, m] = data.date.split('-').map(Number);
+  // mostra o mês da fatura em que a compra entrou
+  const [y, m] = data.bill.split('-').map(Number);
   view.y = y; view.m = m - 1;
   save(); render();
 });
@@ -653,13 +691,25 @@ function openManage(key) {
   manageKey = key;
   $('#manageTitle').textContent = key === 'cards' ? 'Cartões e contas' : 'Categorias';
   $('#manageColor').value = PALETTE[state[key].length % PALETTE.length];
+  $('#manageClosing').innerHTML = closingOptions(null);
   renderManage(); $('#manageDialog').showModal();
 }
+const closingOptions = sel => '<option value="">Sem fechamento (conta/débito)</option>' +
+  Array.from({ length: 31 }, (_, i) => `<option value="${i + 1}" ${sel === i + 1 ? 'selected' : ''}>Fecha dia ${i + 1}</option>`).join('');
+
 function renderManage() {
+  const cards = manageKey === 'cards';
+  $('#manageHint').textContent = cards
+    ? 'Toque na cor para trocá-la e no nome para renomear. No dia de fechamento, compras feitas a partir desse dia entram na fatura do mês seguinte.'
+    : 'Toque na cor para trocá-la e no nome para renomear.';
+  $('#manageClosingWrap').hidden = !cards;
   $('#manageList').innerHTML = state[manageKey].map(x => `
     <div data-id="${x.id}">
       <input type="color" class="swatch" value="${x.color}" aria-label="Cor de ${esc(x.name)}" title="Mudar cor">
-      <input class="rename" value="${esc(x.name)}" aria-label="Nome" title="Toque para renomear">
+      <div class="mcol">
+        <input class="rename" value="${esc(x.name)}" aria-label="Nome" title="Toque para renomear">
+        ${cards ? `<select class="closing" aria-label="Dia de fechamento da fatura">${closingOptions(x.closing)}</select>` : ''}
+      </div>
       <button type="button" class="icon-btn danger" data-rm="${x.id}" aria-label="Remover" title="Remover">${ICON_DEL}</button>
     </div>`).join('');
 }
@@ -670,8 +720,14 @@ $('#manageList').addEventListener('input', e => {
   const it = manageItem(e.target); if (!it) return;
   it.color = e.target.value; save(); render();
 });
-// Nome: salva ao sair do campo
+// Nome: salva ao sair do campo / Fechamento: recalcula a fatura das compras recentes desse cartão
 $('#manageList').addEventListener('change', e => {
+  if (e.target.matches('.closing')) {
+    const it = manageItem(e.target); if (!it) return;
+    it.closing = e.target.value ? +e.target.value : null;
+    rebillCard(it.id);
+    save(); render(); return;
+  }
   if (!e.target.matches('.rename')) return;
   const it = manageItem(e.target); if (!it) return;
   const name = e.target.value.trim();
@@ -692,8 +748,10 @@ $('#manageList').addEventListener('click', e => {
 });
 $('#manageAdd').onclick = () => {
   const name = $('#manageName').value.trim(); if (!name) return;
-  state[manageKey].push({ id: uid(), name, color: $('#manageColor').value });
-  $('#manageName').value = '';
+  const item = { id: uid(), name, color: $('#manageColor').value };
+  if (manageKey === 'cards') item.closing = $('#manageClosing').value ? +$('#manageClosing').value : null;
+  state[manageKey].push(item);
+  $('#manageName').value = ''; $('#manageClosing').value = '';
   $('#manageColor').value = PALETTE[state[manageKey].length % PALETTE.length];
   save(); renderManage(); render();
 };
@@ -721,10 +779,10 @@ function ensureSubs() {
     for (let k = s.start; k <= limit; k = nextKey(k)) {
       if (s.gen.includes(k)) continue;
       s.gen.push(k);
-      state.tx.push({
+      state.tx.push(withBill({
         id: uid(), created: Date.now(), desc: s.desc, amount: s.amount, date: subDate(k, s.day),
         type: 'gasto', card: s.card, cat: s.cat, sub: s.id,
-      });
+      }));
       changed = true;
     }
   }
@@ -794,7 +852,7 @@ subForm.addEventListener('submit', e => {
     const nk = nowKey();
     state.tx.forEach(t => {
       if (t.sub === s.id && t.date.slice(0, 7) >= nk) {
-        Object.assign(t, { desc: s.desc, amount: s.amount, card: s.card, cat: s.cat, date: subDate(t.date.slice(0, 7), s.day) });
+        withBill(Object.assign(t, { desc: s.desc, amount: s.amount, card: s.card, cat: s.cat, date: subDate(t.date.slice(0, 7), s.day) }));
       }
     });
   } else state.subs.push({ id: uid(), active: true, gen: [], ...data });
@@ -872,7 +930,7 @@ const monthTitle = key => {
 
 // catId: quando informado, o extrato traz só os lançamentos daquela categoria
 function buildStatement(keys, catId = null) {
-  const inScope = t => keys.some(k => t.date.startsWith(k)) && (!catId || t.cat === catId);
+  const inScope = t => keys.includes(billKey(t)) && (!catId || t.cat === catId);
   const catName = catId ? find(state.cats, catId).name : null;
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
@@ -903,7 +961,7 @@ function buildStatement(keys, catId = null) {
 
   keys.forEach((key, i) => {
     if (i) doc.addPage();
-    const txs = state.tx.filter(t => t.date.startsWith(key) && inScope(t))
+    const txs = state.tx.filter(t => billKey(t) === key && inScope(t))
       .sort((a, b) => a.date.localeCompare(b.date) || (a.created || 0) - (b.created || 0));
     const total = txs.reduce((s, t) => s + signed(t), 0);
 
@@ -1015,8 +1073,8 @@ exportForm.addEventListener('submit', async e => {
   const all = exportForm.period.value === 'all';
   const catId = exportForm.cat.value || null;
   const pool = state.tx.filter(t => !catId || t.cat === catId);
-  const keys = all ? [...new Set(pool.map(t => t.date.slice(0, 7)))].sort() : [monthKey()];
-  if (!pool.some(t => keys.some(k => t.date.startsWith(k)))) {
+  const keys = all ? [...new Set(pool.map(billKey))].sort() : [monthKey()];
+  if (!pool.some(t => keys.includes(billKey(t)))) {
     const where = catId ? ` na categoria ${find(state.cats, catId).name}` : '';
     return alert(all ? `Ainda não há lançamentos${where} para exportar.` : `Não há lançamentos${where} neste mês.`);
   }
@@ -1077,12 +1135,12 @@ $('#importFile').onchange = async e => {
   if (!d.tx.length) return alert('O arquivo não tem lançamentos.');
   const existing = d.tx.filter(t => state.tx.some(x => x.id === t.id)).length;
   const fresh = d.tx.length - existing;
-  const months = [...new Set(d.tx.map(t => t.date.slice(0, 7)))].sort().map(monthTitle);
+  const months = [...new Set(d.tx.map(billKey))].sort().map(monthTitle);
   const msg = `Importar ${d.tx.length} lançamento(s) de ${months.join(', ')}?\n\n` +
     `• ${fresh} novo(s)\n• ${existing} já existente(s) (serão atualizados)\n\nNenhum lançamento atual será apagado.`;
   if (!confirm(msg)) return;
   mergeImport(d);
-  const [y, m] = d.tx.map(t => t.date).sort().pop().split('-').map(Number);
+  const [y, m] = d.tx.map(billKey).sort().pop().split('-').map(Number);
   view.y = y; view.m = m - 1;
   save(); render();
 };
