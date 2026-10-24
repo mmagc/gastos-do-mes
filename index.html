@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Gastos do Mês</title>
-<meta name="theme-color" content="#dc2626">
+<meta name="theme-color" content="#c8102e">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -12,15 +12,15 @@
 <style>
   :root {
     --bg: #fbf4f4; --card: #ffffff; --text: #2a1b1d; --muted: #846b6e;
-    --line: #f0e2e3; --accent: #dc2626; --accent-2: #e11d48; --accent-soft: #fee2e2;
-    --hero-1: #ef4444; --hero-2: #9f1239;
-    --pos: #b91c1c; --neg: #16a34a; --shadow: 0 2px 10px rgba(60,20,20,.07);
+    --line: #f0e2e3; --accent: #c8102e; --accent-2: #d00a2a; --accent-soft: #fde0e4;
+    --hero-1: #d00a2a; --hero-2: #7a0019;
+    --pos: #b00020; --neg: #16a34a; --shadow: 0 2px 10px rgba(60,20,20,.07);
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #140e0f; --card: #221819; --text: #f6ecec; --muted: #ab9093;
-      --line: #3a2a2c; --accent: #f87171; --accent-2: #e11d48; --accent-soft: #3f1d20;
-      --hero-1: #dc2626; --hero-2: #7f1d1d;
+      --line: #3a2a2c; --accent: #ff4d6a; --accent-2: #d00a2a; --accent-soft: #3d1219;
+      --hero-1: #b8001f; --hero-2: #5c0012;
       --pos: #fca5a5; --neg: #4ade80; --shadow: none;
     }
   }
@@ -84,7 +84,7 @@
   .fab {
     position: fixed; right: 20px; bottom: calc(20px + env(safe-area-inset-bottom));
     width: 60px; height: 60px; border-radius: 50%; border: 0; background: var(--accent-2); color: #fff;
-    font-size: 30px; box-shadow: 0 6px 20px rgba(225,29,72,.45); cursor: pointer;
+    font-size: 30px; box-shadow: 0 6px 20px rgba(208,10,42,.45); cursor: pointer;
   }
   dialog {
     border: 0; border-radius: 20px; padding: 0; width: min(520px, calc(100vw - 32px));
@@ -223,7 +223,7 @@
     <div class="manage-list" id="manageList"></div>
     <div class="add-inline">
       <input id="manageName" placeholder="Nome">
-      <input id="manageColor" type="color" value="#ef4444">
+      <input id="manageColor" type="color" value="#d00a2a">
       <button type="button" class="btn primary" id="manageAdd">Adicionar</button>
     </div>
     <div class="actions"><button class="btn">Fechar</button></div>
@@ -231,7 +231,7 @@
 </dialog>
 
 <script>
-const PALETTE = ['#ef4444','#f59e0b','#10b981','#3b82f6','#a855f7','#ec4899','#14b8a6','#84cc16','#f97316','#64748b'];
+const PALETTE = ['#d00a2a','#f59e0b','#10b981','#3b82f6','#a855f7','#ec4899','#14b8a6','#84cc16','#f97316','#64748b'];
 const KEY = 'gastos-mes-v1';
 const uid = () => Math.random().toString(36).slice(2, 10);
 const brl = v => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
