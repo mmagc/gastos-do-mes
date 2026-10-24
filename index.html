@@ -4,22 +4,24 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Gastos do Mês</title>
-<meta name="theme-color" content="#4f46e5">
+<meta name="theme-color" content="#dc2626">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <style>
   :root {
-    --bg: #f4f5fb; --card: #ffffff; --text: #1b1d2a; --muted: #6b7083;
-    --line: #e4e6f0; --accent: #4f46e5; --accent-2: #6366f1;
-    --pos: #dc2626; --neg: #16a34a; --shadow: 0 2px 10px rgba(20,20,60,.06);
+    --bg: #fbf4f4; --card: #ffffff; --text: #2a1b1d; --muted: #846b6e;
+    --line: #f0e2e3; --accent: #dc2626; --accent-2: #e11d48; --accent-soft: #fee2e2;
+    --hero-1: #ef4444; --hero-2: #9f1239;
+    --pos: #b91c1c; --neg: #16a34a; --shadow: 0 2px 10px rgba(60,20,20,.07);
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #0f1117; --card: #1a1d27; --text: #eceef6; --muted: #9096ab;
-      --line: #2a2e3c; --accent: #818cf8; --accent-2: #6366f1;
-      --pos: #f87171; --neg: #4ade80; --shadow: none;
+      --bg: #140e0f; --card: #221819; --text: #f6ecec; --muted: #ab9093;
+      --line: #3a2a2c; --accent: #f87171; --accent-2: #e11d48; --accent-soft: #3f1d20;
+      --hero-1: #dc2626; --hero-2: #7f1d1d;
+      --pos: #fca5a5; --neg: #4ade80; --shadow: none;
     }
   }
   * { box-sizing: border-box; }
@@ -30,7 +32,7 @@
   }
   main { max-width: 640px; margin: 0 auto; padding: 16px; }
   header.hero {
-    background: linear-gradient(135deg, var(--accent-2), #7c3aed);
+    background: linear-gradient(135deg, var(--hero-1), var(--hero-2));
     color: #fff; border-radius: 20px; padding: 20px; box-shadow: var(--shadow);
   }
   .month-nav { display: flex; align-items: center; justify-content: space-between; }
@@ -82,7 +84,7 @@
   .fab {
     position: fixed; right: 20px; bottom: calc(20px + env(safe-area-inset-bottom));
     width: 60px; height: 60px; border-radius: 50%; border: 0; background: var(--accent-2); color: #fff;
-    font-size: 30px; box-shadow: 0 6px 20px rgba(79,70,229,.45); cursor: pointer;
+    font-size: 30px; box-shadow: 0 6px 20px rgba(225,29,72,.45); cursor: pointer;
   }
   dialog {
     border: 0; border-radius: 20px; padding: 0; width: min(520px, calc(100vw - 32px));
@@ -112,8 +114,22 @@
   .manage-list div span { flex: 1; }
   .add-inline { display: flex; gap: 8px; }
   .add-inline input[type=color] { width: 48px; padding: 4px; flex: 0 0 auto; }
-  .links { display: flex; gap: 10px; justify-content: center; margin-top: 16px; flex-wrap: wrap; }
-  .links button { background: none; border: 0; color: var(--accent); font: inherit; cursor: pointer; }
+  .tools { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .tool {
+    display: flex; align-items: center; gap: 10px; text-align: left; min-width: 0;
+    background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 12px;
+    font: inherit; color: var(--text); cursor: pointer; transition: border-color .15s, transform .1s;
+  }
+  .tool:hover { border-color: var(--accent); }
+  .tool:active { transform: scale(.97); }
+  .tool-ic {
+    flex: 0 0 auto; width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center;
+    background: var(--accent-soft); color: var(--accent);
+  }
+  .tool-ic svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .tool-txt { display: grid; min-width: 0; }
+  .tool-txt b { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tool-txt small { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 </style>
 </head>
 <body>
@@ -144,13 +160,36 @@
     <ul class="tx" id="txList"></ul>
   </section>
 
-  <div class="links">
-    <button id="manageCards">Gerenciar cartões/contas</button>
-    <button id="manageCats">Gerenciar categorias</button>
-    <button id="exportBtn">Exportar backup</button>
-    <button id="importBtn">Importar backup</button>
+  <section class="box">
+    <h2>Configurações</h2>
+    <div class="tools">
+      <button id="manageCards" class="tool">
+        <span class="tool-ic">
+          <svg viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 9.5h19M6 15h4"/></svg>
+        </span>
+        <span class="tool-txt"><b>Cartões</b><small id="cardsCount"></small></span>
+      </button>
+      <button id="manageCats" class="tool">
+        <span class="tool-ic">
+          <svg viewBox="0 0 24 24"><path d="M3 12V4.5A1.5 1.5 0 0 1 4.5 3H12l9 9-9 9-9-9z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>
+        </span>
+        <span class="tool-txt"><b>Categorias</b><small id="catsCount"></small></span>
+      </button>
+      <button id="exportBtn" class="tool">
+        <span class="tool-ic">
+          <svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"/></svg>
+        </span>
+        <span class="tool-txt"><b>Exportar</b><small>Salvar backup</small></span>
+      </button>
+      <button id="importBtn" class="tool">
+        <span class="tool-ic">
+          <svg viewBox="0 0 24 24"><path d="M12 15V3M7 8l5-5 5 5M4 20h16"/></svg>
+        </span>
+        <span class="tool-txt"><b>Importar</b><small>Restaurar backup</small></span>
+      </button>
+    </div>
     <input type="file" id="importFile" accept="application/json" hidden>
-  </div>
+  </section>
 </main>
 
 <button class="fab" id="addBtn" aria-label="Adicionar lançamento">+</button>
@@ -184,7 +223,7 @@
     <div class="manage-list" id="manageList"></div>
     <div class="add-inline">
       <input id="manageName" placeholder="Nome">
-      <input id="manageColor" type="color" value="#6366f1">
+      <input id="manageColor" type="color" value="#ef4444">
       <button type="button" class="btn primary" id="manageAdd">Adicionar</button>
     </div>
     <div class="actions"><button class="btn">Fechar</button></div>
@@ -192,7 +231,7 @@
 </dialog>
 
 <script>
-const PALETTE = ['#6366f1','#f59e0b','#10b981','#ef4444','#06b6d4','#a855f7','#ec4899','#84cc16','#f97316','#64748b'];
+const PALETTE = ['#ef4444','#f59e0b','#10b981','#3b82f6','#a855f7','#ec4899','#14b8a6','#84cc16','#f97316','#64748b'];
 const KEY = 'gastos-mes-v1';
 const uid = () => Math.random().toString(36).slice(2, 10);
 const brl = v => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -235,6 +274,10 @@ function render() {
     const v = txs.filter(t => t.card === c.id).reduce((s, t) => s + signed(t), 0);
     return `<div class="chip">${esc(c.name)}<b>${brl(v)}</b></div>`;
   }).join('');
+
+  const plural = (n, s, p) => `${n} ${n === 1 ? s : p}`;
+  $('#cardsCount').textContent = plural(state.cards.length, 'cadastrado', 'cadastrados');
+  $('#catsCount').textContent = plural(state.cats.length, 'cadastrada', 'cadastradas');
 
   renderChart(txs);
   renderList(txs);
