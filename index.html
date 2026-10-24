@@ -91,6 +91,18 @@
   .tx .info { flex: 1; min-width: 0; }
   .tx .desc { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tx .meta { color: var(--muted); font-size: 12px; }
+  .badge {
+    display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 6px; vertical-align: 1px;
+    background: var(--accent-soft); color: var(--accent); font-size: 11px; font-weight: 700;
+  }
+  .inst-box { display: grid; gap: 8px; background: var(--bg); border-radius: 12px; padding: 10px 12px; }
+  .inst-box[hidden] { display: none; }
+  .inst-box select { background: var(--card); }
+  .inst-preview { margin: 0; font-size: 13px; color: var(--text); }
+  .inst-preview:empty { display: none; }
+  .inst-preview small { color: var(--muted); }
+  label.check { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 13px; cursor: pointer; }
+  label.check input { width: 18px; height: 18px; accent-color: var(--accent-2); flex: 0 0 auto; }
   .tx .amt { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .tx .amt.gasto { color: var(--pos); }
   .tx .amt.pagamento { color: var(--neg); }
@@ -250,6 +262,21 @@
       <label>Cartão/Conta<select name="card" required></select></label>
       <label>Categoria<select name="cat" required></select></label>
     </div>
+    <div class="inst-box" id="instRow">
+      <div class="row2">
+        <label>Parcelas<select name="parcelas"></select></label>
+        <label>Valor digitado é<select name="valmode">
+          <option value="total">Total</option>
+          <option value="parcela">Por parcela</option>
+        </select></label>
+      </div>
+      <p class="inst-preview" id="instPreview"></p>
+    </div>
+    <div class="inst-box" id="instEdit" hidden>
+      <p class="inst-preview" id="instInfo"></p>
+      <label class="check"><input type="checkbox" name="applyAll" checked>
+        <span>Aplicar descrição, cartão e categoria a todas as parcelas</span></label>
+    </div>
     <div class="actions">
       <button type="button" class="btn danger" id="txDelete" hidden>Excluir</button>
       <button type="button" class="btn" id="txCancel">Cancelar</button>
@@ -388,7 +415,7 @@ function renderList(txs) {
     return `<li>
       <span class="dot" style="background:${k.color}"></span>
       <div class="info" data-edit="${t.id}" style="cursor:pointer">
-        <div class="desc">${esc(t.desc)}</div>
+        <div class="desc">${esc(t.desc)}${t.inst ? `<span class="badge">${t.inst.n}/${t.inst.of}</span>` : ''}</div>
         <div class="meta">${d} · ${esc(c.name)} · ${esc(k.name)}</div>
       </div>
       <span class="amt ${t.type}">${t.type === 'pagamento' ? '−' : '+'} ${brl(t.amount)}</span>
@@ -403,10 +430,50 @@ function renderList(txs) {
 const ICON_EDIT = '<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4"/></svg>';
 const ICON_DEL = '<svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>';
 
+// ---------- parcelas ----------
+// Cada parcela é um lançamento próprio no seu mês, com t.inst = { id (da compra), n (nº da parcela), of (total) }
+const txLabel = t => t.inst ? `${t.desc} (${t.inst.n}/${t.inst.of})` : t.desc;
+const siblings = t => t.inst ? state.tx.filter(x => x.inst?.id === t.inst.id) : [t];
+const shortMonth = d => { const [y, m] = d.split('-'); return `${['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][m - 1]}/${y}`; };
+
+// soma meses a uma data AAAA-MM-DD, mantendo o dia (ou o último dia do mês, ex.: 31/01 → 28/02)
+function addMonths(date, k) {
+  const [y, m, d] = date.split('-').map(Number);
+  const first = new Date(y, m - 1 + k, 1);
+  const last = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+  return `${first.getFullYear()}-${String(first.getMonth() + 1).padStart(2, '0')}-${String(Math.min(d, last)).padStart(2, '0')}`;
+}
+
+// divide em centavos: a diferença do arredondamento vai para as primeiras parcelas
+function splitInstallments(amount, n, mode) {
+  const totalCents = mode === 'parcela' ? Math.round(amount * 100) * n : Math.round(amount * 100);
+  const base = Math.floor(totalCents / n), rest = totalCents - base * n;
+  return Array.from({ length: n }, (_, i) => (base + (i < rest ? 1 : 0)) / 100);
+}
+
+function createInstallments(data, n, mode) {
+  const group = uid(), now = Date.now();
+  splitInstallments(data.amount, n, mode).forEach((amount, i) => state.tx.push({
+    ...data, id: uid(), created: now + i, amount, date: addMonths(data.date, i), inst: { id: group, n: i + 1, of: n },
+  }));
+}
+
 function deleteTx(id) {
   const t = state.tx.find(x => x.id === id); if (!t) return false;
-  if (!confirm(`Excluir "${t.desc}" (${brl(t.amount)})?`)) return false;
-  state.tx = state.tx.filter(x => x.id !== id); save(); render();
+  if (t.inst) {
+    const all = siblings(t);
+    const total = all.reduce((s, x) => s + x.amount, 0);
+    if (confirm(`"${t.desc}" é a parcela ${t.inst.n} de ${t.inst.of}.\n\n` +
+      `OK → excluir a compra inteira (${all.length} parcelas, ${brl(total)})\nCancelar → escolher excluir só esta parcela`)) {
+      state.tx = state.tx.filter(x => x.inst?.id !== t.inst.id);
+    } else if (confirm(`Excluir só a parcela ${t.inst.n}/${t.inst.of} (${brl(t.amount)})?`)) {
+      state.tx = state.tx.filter(x => x.id !== id);
+    } else return false;
+  } else {
+    if (!confirm(`Excluir "${t.desc}" (${brl(t.amount)})?`)) return false;
+    state.tx = state.tx.filter(x => x.id !== id);
+  }
+  save(); render();
   return true;
 }
 
@@ -430,19 +497,61 @@ function openTx(t) {
   txForm.type.value = t ? t.type : 'gasto';
   if (t) { txForm.card.value = t.card; txForm.cat.value = t.cat; }
   else if (state.lastCard) txForm.card.value = state.lastCard;
+  // parcelas: em compra nova escolhe a quantidade; numa parcela existente mostra de qual compra ela é
+  txForm.parcelas.innerHTML = Array.from({ length: 48 }, (_, i) =>
+    `<option value="${i + 1}">${i ? `${i + 1}x` : 'À vista (1x)'}</option>`).join('');
+  txForm.parcelas.value = '1'; txForm.valmode.value = 'total'; txForm.applyAll.checked = true;
+  $('#instEdit').hidden = !t?.inst;
+  if (t?.inst) {
+    const all = siblings(t);
+    $('#instInfo').innerHTML = `Parcela <b>${t.inst.n} de ${t.inst.of}</b> · compra de ${brl(all.reduce((s, x) => s + x.amount, 0))}` +
+      `<br><small>Valor e data mudam só nesta parcela.</small>`;
+  }
+  updateInstUI();
   txDialog.showModal();
   if (!t) txForm.desc.focus();
 }
 
-txForm.addEventListener('submit', e => {
+function parseAmount() {
   const raw = txForm.amount.value.trim().replace(/\./g, '').replace(',', '.');
-  const amount = Math.round(parseFloat(raw) * 100) / 100;
+  return Math.round(parseFloat(raw) * 100) / 100;
+}
+
+function updateInstUI() {
+  const editingInst = editingId && state.tx.find(t => t.id === editingId)?.inst;
+  $('#instRow').hidden = txForm.type.value !== 'gasto' || !!editingInst;
+  const n = +txForm.parcelas.value, amount = parseAmount();
+  txForm.valmode.disabled = n === 1;
+  if (n === 1 || !(amount > 0) || $('#instRow').hidden) { $('#instPreview').innerHTML = ''; return; }
+  const parts = splitInstallments(amount, n, txForm.valmode.value);
+  const total = parts.reduce((s, v) => s + v, 0);
+  const even = parts.every(v => v === parts[0]);
+  const date = txForm.date.value;
+  $('#instPreview').innerHTML = `<b>${n}x de ${brl(parts[0])}</b>${even ? '' : ' (aprox.)'} = ${brl(total)}` +
+    (date ? `<br><small>De ${shortMonth(date)} a ${shortMonth(addMonths(date, n - 1))}, uma parcela por mês</small>` : '');
+}
+['input', 'change'].forEach(ev => txForm.addEventListener(ev, e => {
+  if (['amount', 'parcelas', 'valmode', 'date', 'type'].includes(e.target.name)) updateInstUI();
+}));
+
+txForm.addEventListener('submit', e => {
+  const amount = parseAmount();
   if (!(amount > 0)) { e.preventDefault(); txForm.amount.setCustomValidity('Valor inválido'); txForm.amount.reportValidity(); return; }
   const data = {
     desc: txForm.desc.value.trim(), amount, date: txForm.date.value,
     type: txForm.type.value, card: txForm.card.value, cat: txForm.cat.value,
   };
-  if (editingId) Object.assign(state.tx.find(t => t.id === editingId), data);
+  const n = data.type === 'gasto' ? +txForm.parcelas.value || 1 : 1;
+  const current = editingId && state.tx.find(t => t.id === editingId);
+  if (current?.inst) {
+    // parcela existente: valor/data só nesta; descrição/cartão/categoria opcionalmente em todas
+    Object.assign(current, data);
+    if (txForm.applyAll.checked) siblings(current).forEach(x => Object.assign(x, { desc: data.desc, card: data.card, cat: data.cat }));
+  } else if (n > 1) {
+    // compra nova parcelada (ou um gasto à vista que virou parcelado na edição)
+    if (current) state.tx = state.tx.filter(t => t.id !== current.id);
+    createInstallments(data, n, txForm.valmode.value);
+  } else if (current) Object.assign(current, data);
   else state.tx.push({ id: uid(), created: Date.now(), ...data });
   state.lastCard = data.card;
   const [y, m] = data.date.split('-').map(Number);
@@ -651,7 +760,7 @@ function buildStatement(keys, catId = null) {
       startY: y,
       head: [['Data', 'Descrição', 'Cartão / conta', 'Categoria', 'Valor']],
       body: txs.length ? txs.map(t => [
-        t.date.split('-').reverse().join('/'), t.desc, find(state.cards, t.card).name, find(state.cats, t.cat).name,
+        t.date.split('-').reverse().join('/'), txLabel(t), find(state.cards, t.card).name, find(state.cats, t.cat).name,
         t.type === 'pagamento' ? minus(t.amount) : money(t.amount),
       ]) : [['', 'Nenhum lançamento', '', '', '']],
       foot: [['', '', '', catName ? 'Total' : 'Total a pagar', money(total)]],

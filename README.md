@@ -14,6 +14,7 @@ PWA (Progressive Web App) simples para controlar os gastos do mês, separados po
 | **Saldo por cartão** | Logo abaixo do total, um "chip" para cada cartão/conta com o valor dele no mês. |
 | **Gastos (+)** | Cada gasto é **somado** ao total. Ex.: comprou uma camiseta de R$ 100 no cartão X → o saldo vai de R$ 0 para R$ 100. |
 | **Pagamentos / estornos (−)** | São **subtraídos** do total (ex.: um estorno, ou um pagamento parcial da fatura). |
+| **Compras parceladas** | Ao lançar um gasto, escolha de 1x a 48x. O app cria uma parcela em cada mês (mesmo dia; se o mês for mais curto, usa o último dia) e mostra a prévia antes de salvar, ex.: "10x de R$ 350,00". Dá para digitar o **total da compra** ou o **valor de cada parcela**. |
 | **Gráfico** | Gráfico de rosca + barras com a divisão dos gastos por **categoria** ou por **cartão** (alternável), com valor e porcentagem. |
 | **Navegação por mês** | Setas no topo para ver meses anteriores/futuros; cada mês tem seu próprio total. |
 | **Editar / excluir** | Cada lançamento tem um botão de **lápis** (editar) e de **lixeira** (excluir). Na tela de edição também há o botão **Excluir**. |
@@ -63,6 +64,19 @@ Consequências:
 - Só dá para importar extratos **gerados por este app**. PDFs de fatura do banco não são lidos.
 - Se o PDF for editado, "impresso como PDF" de novo ou passado por algum conversor, os metadados podem se perder e o arquivo deixa de ser importável. Guarde o arquivo original.
 - Backups antigos em `.json` também continuam sendo aceitos no **Importar**.
+
+### Compras parceladas
+
+1. Toque em **+**, preencha o gasto e escolha em **Parcelas** (ex.: `10x`).
+2. Em **Valor digitado é**, diga se o valor é o **Total** da compra (R$ 3.500 → 10x de R$ 350) ou **Por parcela** (R$ 350 → total de R$ 3.500).
+3. Confira a prévia (`10x de R$ 350,00 = R$ 3.500,00 · de out/2026 a jul/2027`) e salve.
+
+- Cada parcela aparece no seu mês com uma etiqueta **3/10** e entra no total a pagar daquele mês.
+- Se a divisão não for exata, os centavos que sobram vão para as primeiras parcelas (R$ 100 em 3x = 33,34 + 33,33 + 33,33).
+- **Editar uma parcela:** valor e data mudam só nela; descrição, cartão e categoria podem ser aplicados a todas as parcelas (opção marcada por padrão).
+- **Excluir:** o app pergunta se é para apagar a **compra inteira** ou **só aquela parcela**.
+- Um gasto lançado à vista pode virar parcelado: edite e escolha o número de parcelas.
+- A 1ª parcela cai no mês da data da compra. O app não considera a data de fechamento da fatura; se a compra caiu na próxima fatura, ajuste a data.
 
 ### Como o total é calculado
 
@@ -122,6 +136,7 @@ Não há build nem framework. O gráfico é desenhado em SVG puro. A única depe
 ```
 
 - `type`: `"gasto"` (soma) ou `"pagamento"` (subtrai).
+- `inst` (só em parcelas): `{ "id": "<id da compra>", "n": 2, "of": 10 }` — parcela 2 de 10. Cada parcela é um lançamento próprio, no seu mês.
 - `date`: formato `AAAA-MM-DD`; é usada para separar os lançamentos por mês.
 
 ---
@@ -156,7 +171,6 @@ O site é publicado pelo GitHub Pages a partir da branch `main` (pasta raiz). Qu
 
 ## 🛣️ Ideias para o futuro
 
-- Parcelamento automático (ex.: 3x de R$ 100 distribuídos nos próximos meses)
 - Data de fechamento/vencimento por cartão
 - Limite de gasto por categoria com alerta
 - Gastos recorrentes (assinaturas)
