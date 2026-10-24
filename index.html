@@ -114,7 +114,8 @@
   }
   dialog::backdrop { background: rgba(0,0,0,.45); }
   form.sheet { padding: 20px; display: grid; gap: 12px; }
-  form.sheet h3 { margin: 0; }
+  /* o título recebe o foco ao abrir a janela, para o celular não abrir sozinho um seletor ou o teclado */
+  form.sheet h3 { margin: 0; outline: none; }
   label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
   input, select {
     font: inherit; font-size: 16px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line);
@@ -235,7 +236,7 @@
 
 <dialog id="txDialog">
   <form class="sheet" method="dialog" id="txForm">
-    <h3 id="txTitle">Novo lançamento</h3>
+    <h3 id="txTitle" tabindex="-1" autofocus>Novo lançamento</h3>
     <div class="type-toggle">
       <label><input type="radio" name="type" value="gasto" checked><span>➕ Gasto</span></label>
       <label><input type="radio" name="type" value="pagamento"><span>➖ Pagamento/Estorno</span></label>
@@ -259,7 +260,7 @@
 
 <dialog id="manageDialog">
   <form class="sheet" method="dialog" id="manageForm">
-    <h3 id="manageTitle"></h3>
+    <h3 id="manageTitle" tabindex="-1" autofocus></h3>
     <p class="manage-hint">Toque na cor para trocá-la e no nome para renomear.</p>
     <div class="manage-list" id="manageList"></div>
     <div class="add-inline">
@@ -273,7 +274,7 @@
 
 <dialog id="exportDialog">
   <form class="sheet" method="dialog" id="exportForm">
-    <h3>Exportar extrato em PDF</h3>
+    <h3 tabindex="-1" autofocus>Exportar extrato em PDF</h3>
     <p class="manage-hint">O PDF pode ser lido de volta em <b>Importar</b> para restaurar os lançamentos.</p>
     <div class="type-toggle">
       <label><input type="radio" name="period" value="month" checked><span id="exportMonthLabel">Este mês</span></label>

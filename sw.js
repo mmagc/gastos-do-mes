@@ -1,6 +1,6 @@
 // Cache dos arquivos do app para funcionar offline.
 // Ao alterar algum arquivo, aumente a versão para forçar a atualização.
-const CACHE = 'gastos-v7';
+const CACHE = 'gastos-v8';
 const FILES = ['./', 'index.html', 'manifest.json', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => {
