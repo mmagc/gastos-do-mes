@@ -16,8 +16,8 @@ PWA (Progressive Web App) simples para controlar os gastos do mês, separados po
 | **Pagamentos / estornos (−)** | São **subtraídos** do total (ex.: um estorno, ou um pagamento parcial da fatura). |
 | **Gráfico** | Gráfico de rosca + barras com a divisão dos gastos por **categoria** ou por **cartão** (alternável), com valor e porcentagem. |
 | **Navegação por mês** | Setas no topo para ver meses anteriores/futuros; cada mês tem seu próprio total. |
-| **Editar / excluir** | Toque em um lançamento para editar; no ✕ para excluir. |
-| **Cartões e categorias personalizáveis** | Adicione, remova e escolha a cor de cada cartão/conta e categoria. |
+| **Editar / excluir** | Cada lançamento tem um botão de **lápis** (editar) e de **lixeira** (excluir). Na tela de edição também há o botão **Excluir**. |
+| **Cartões e categorias personalizáveis** | Adicione, remova, **renomeie** e **troque a cor** de cada cartão/conta e categoria a qualquer momento. |
 | **Backup** | Exporte seus dados para um arquivo `.json` e importe de volta (útil para trocar de aparelho). |
 | **Funciona offline** | Graças ao service worker, o app abre mesmo sem internet. |
 | **Instalável** | Pode ser instalado na tela inicial do celular ou no computador como um app. |

@@ -94,7 +94,15 @@
   .tx .amt { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .tx .amt.gasto { color: var(--pos); }
   .tx .amt.pagamento { color: var(--neg); }
-  .icon-btn { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 18px; padding: 4px 6px; }
+  .icon-btn {
+    background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 18px;
+    width: 34px; height: 34px; border-radius: 9px; display: inline-grid; place-items: center; flex: 0 0 auto;
+  }
+  .icon-btn:hover { background: var(--bg); color: var(--text); }
+  .icon-btn.danger:hover { background: var(--accent-soft); color: var(--accent); }
+  .icon-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .tx-actions { display: flex; gap: 2px; margin-right: -6px; }
+  .btn.danger { background: var(--accent-soft); color: var(--accent); font-weight: 600; margin-right: auto; }
   .fab {
     position: fixed; right: 20px; bottom: calc(20px + env(safe-area-inset-bottom));
     width: 60px; height: 60px; border-radius: 50%; border: 0; background: var(--accent-2); color: #fff;
@@ -123,11 +131,18 @@
     cursor: pointer; color: var(--text); font-size: 14px;
   }
   .type-toggle input:checked + span { border-color: var(--accent); background: var(--bg); font-weight: 600; }
-  .manage-list { display: grid; gap: 6px; max-height: 240px; overflow: auto; }
-  .manage-list div { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
-  .manage-list div span { flex: 1; }
+  .manage-list { display: grid; gap: 6px; max-height: 320px; overflow: auto; }
+  .manage-list div { display: flex; align-items: center; gap: 8px; }
+  .swatch {
+    width: 38px; height: 38px; padding: 0; border: 0; border-radius: 10px; background: none; cursor: pointer; flex: 0 0 auto;
+  }
+  .swatch::-webkit-color-swatch-wrapper { padding: 0; }
+  .swatch::-webkit-color-swatch { border: 2px solid var(--line); border-radius: 10px; }
+  .swatch::-moz-color-swatch { border: 2px solid var(--line); border-radius: 10px; }
+  .manage-list .rename { flex: 1; min-width: 0; padding: 8px 10px; background: transparent; border-color: transparent; }
+  .manage-list .rename:hover, .manage-list .rename:focus { border-color: var(--line); background: var(--bg); }
+  .manage-hint { margin: -4px 0 0; color: var(--muted); font-size: 12px; }
   .add-inline { display: flex; gap: 8px; }
-  .add-inline input[type=color] { width: 48px; padding: 4px; flex: 0 0 auto; }
   .tools { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .tool {
     display: flex; align-items: center; gap: 10px; text-align: left; min-width: 0;
@@ -235,6 +250,7 @@
       <label>Categoria<select name="cat" required></select></label>
     </div>
     <div class="actions">
+      <button type="button" class="btn danger" id="txDelete" hidden>Excluir</button>
       <button type="button" class="btn" id="txCancel">Cancelar</button>
       <button type="submit" class="btn primary">Salvar</button>
     </div>
@@ -244,10 +260,11 @@
 <dialog id="manageDialog">
   <form class="sheet" method="dialog" id="manageForm">
     <h3 id="manageTitle"></h3>
+    <p class="manage-hint">Toque na cor para trocá-la e no nome para renomear.</p>
     <div class="manage-list" id="manageList"></div>
     <div class="add-inline">
       <input id="manageName" placeholder="Nome">
-      <input id="manageColor" type="color" value="#d00a2a">
+      <input id="manageColor" class="swatch" type="color" value="#d00a2a">
       <button type="button" class="btn primary" id="manageAdd">Adicionar</button>
     </div>
     <div class="actions"><button class="btn">Fechar</button></div>
@@ -358,9 +375,22 @@ function renderList(txs) {
         <div class="meta">${d} · ${esc(c.name)} · ${esc(k.name)}</div>
       </div>
       <span class="amt ${t.type}">${t.type === 'pagamento' ? '−' : '+'} ${brl(t.amount)}</span>
-      <button class="icon-btn" data-del="${t.id}" aria-label="Excluir">✕</button>
+      <span class="tx-actions">
+        <button class="icon-btn" data-edit="${t.id}" aria-label="Editar" title="Editar">${ICON_EDIT}</button>
+        <button class="icon-btn danger" data-del="${t.id}" aria-label="Excluir" title="Excluir">${ICON_DEL}</button>
+      </span>
     </li>`;
   }).join('');
+}
+
+const ICON_EDIT = '<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4"/></svg>';
+const ICON_DEL = '<svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>';
+
+function deleteTx(id) {
+  const t = state.tx.find(x => x.id === id); if (!t) return false;
+  if (!confirm(`Excluir "${t.desc}" (${brl(t.amount)})?`)) return false;
+  state.tx = state.tx.filter(x => x.id !== id); save(); render();
+  return true;
 }
 
 function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
@@ -371,6 +401,7 @@ const txDialog = $('#txDialog'), txForm = $('#txForm');
 function openTx(t) {
   editingId = t ? t.id : null;
   $('#txTitle').textContent = t ? 'Editar lançamento' : 'Novo lançamento';
+  $('#txDelete').hidden = !t;
   txForm.card.innerHTML = state.cards.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
   txForm.cat.innerHTML = state.cats.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
   const today = new Date();
@@ -403,13 +434,13 @@ txForm.addEventListener('submit', e => {
 });
 txForm.amount.addEventListener('input', () => txForm.amount.setCustomValidity(''));
 $('#txCancel').onclick = () => txDialog.close();
+$('#txDelete').onclick = () => { if (deleteTx(editingId)) txDialog.close(); };
 $('#addBtn').onclick = () => openTx();
 
 $('#txList').addEventListener('click', e => {
   const del = e.target.closest('[data-del]'), ed = e.target.closest('[data-edit]');
-  if (del && confirm('Excluir este lançamento?')) {
-    state.tx = state.tx.filter(t => t.id !== del.dataset.del); save(); render();
-  } else if (ed) openTx(state.tx.find(t => t.id === ed.dataset.edit));
+  if (del) deleteTx(del.dataset.del);
+  else if (ed) openTx(state.tx.find(t => t.id === ed.dataset.edit));
 });
 
 // ---------- navegação ----------
@@ -432,9 +463,30 @@ function openManage(key) {
 }
 function renderManage() {
   $('#manageList').innerHTML = state[manageKey].map(x => `
-    <div><span class="dot" style="background:${x.color}"></span><span>${esc(x.name)}</span>
-    <button type="button" class="icon-btn" data-rm="${x.id}" aria-label="Remover">✕</button></div>`).join('');
+    <div data-id="${x.id}">
+      <input type="color" class="swatch" value="${x.color}" aria-label="Cor de ${esc(x.name)}" title="Mudar cor">
+      <input class="rename" value="${esc(x.name)}" aria-label="Nome" title="Toque para renomear">
+      <button type="button" class="icon-btn danger" data-rm="${x.id}" aria-label="Remover" title="Remover">${ICON_DEL}</button>
+    </div>`).join('');
 }
+const manageItem = el => state[manageKey].find(x => x.id === el.closest('[data-id]')?.dataset.id);
+// Cor: atualiza ao vivo enquanto escolhe
+$('#manageList').addEventListener('input', e => {
+  if (!e.target.matches('.swatch')) return;
+  const it = manageItem(e.target); if (!it) return;
+  it.color = e.target.value; save(); render();
+});
+// Nome: salva ao sair do campo
+$('#manageList').addEventListener('change', e => {
+  if (!e.target.matches('.rename')) return;
+  const it = manageItem(e.target); if (!it) return;
+  const name = e.target.value.trim();
+  if (!name) { e.target.value = it.name; return; }
+  it.name = name; save(); render();
+});
+$('#manageList').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.matches('.rename')) { e.preventDefault(); e.target.blur(); }
+});
 $('#manageList').addEventListener('click', e => {
   const b = e.target.closest('[data-rm]'); if (!b) return;
   if (state[manageKey].length <= 1) return alert('Mantenha pelo menos um item.');
