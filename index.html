@@ -174,6 +174,26 @@
   .theme-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
   .theme-label { font-weight: 600; font-size: 14px; }
   .tool-txt small { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tool.wide { grid-column: 1 / -1; }
+  .badge.sub { background: var(--bg); color: var(--muted); border: 1px solid var(--line); }
+  .subs-total { font-size: 13px; color: var(--muted); }
+  .subs-total b { color: var(--text); font-size: 15px; }
+  .subs-list { display: grid; max-height: 340px; overflow: auto; }
+  .sub-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .sub-row:last-child { border-bottom: 0; }
+  .sub-row .info { flex: 1; min-width: 0; display: grid; }
+  .sub-row .info b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sub-row .info small { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sub-row.off .info, .sub-row.off .dot { opacity: .45; }
+  .switch { position: relative; width: 40px; height: 24px; flex: 0 0 auto; cursor: pointer; }
+  .switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+  .switch span { position: absolute; inset: 0; border-radius: 12px; background: var(--line); transition: background .15s; pointer-events: none; }
+  .switch span::after {
+    content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%;
+    background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .15s;
+  }
+  .switch input:checked + span { background: var(--accent-2); }
+  .switch input:checked + span::after { transform: translateX(16px); }
 </style>
 </head>
 <body>
@@ -218,6 +238,12 @@
           <svg viewBox="0 0 24 24"><path d="M3 12V4.5A1.5 1.5 0 0 1 4.5 3H12l9 9-9 9-9-9z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>
         </span>
         <span class="tool-txt"><b>Categorias</b><small id="catsCount"></small></span>
+      </button>
+      <button id="manageSubs" class="tool wide">
+        <span class="tool-ic">
+          <svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v4.5h-4.5"/><path d="M12 8v4l2.5 2"/></svg>
+        </span>
+        <span class="tool-txt"><b>Assinaturas</b><small id="subsCount"></small></span>
       </button>
       <button id="exportBtn" class="tool">
         <span class="tool-ic">
@@ -299,6 +325,40 @@
   </form>
 </dialog>
 
+<dialog id="subsDialog">
+  <form class="sheet" method="dialog">
+    <h3 tabindex="-1" autofocus>Assinaturas</h3>
+    <p class="manage-hint">Cobranças que se repetem todo mês (streaming, academia, plano de celular…). O app lança sozinho a cobrança de cada mês.</p>
+    <div class="subs-total" id="subsTotal"></div>
+    <div class="subs-list" id="subsList"></div>
+    <div class="actions">
+      <button type="button" class="btn primary" id="subNew" style="margin-right:auto">+ Nova assinatura</button>
+      <button class="btn">Fechar</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="subDialog">
+  <form class="sheet" method="dialog" id="subForm">
+    <h3 id="subTitle" tabindex="-1" autofocus>Nova assinatura</h3>
+    <label>Nome<input name="desc" required placeholder="Ex.: Netflix"></label>
+    <div class="row2">
+      <label>Valor por mês (R$)<input name="amount" required inputmode="decimal" placeholder="39,90"></label>
+      <label>Dia da cobrança<select name="day"></select></label>
+    </div>
+    <div class="row2">
+      <label>Cartão/Conta<select name="card" required></select></label>
+      <label>Categoria<select name="cat" required></select></label>
+    </div>
+    <label>Começou em<input name="start" type="month" required></label>
+    <p class="manage-hint" id="subHint"></p>
+    <div class="actions">
+      <button type="button" class="btn" id="subCancel">Cancelar</button>
+      <button type="submit" class="btn primary">Salvar</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="exportDialog">
   <form class="sheet" method="dialog" id="exportForm">
     <h3 tabindex="-1" autofocus>Exportar extrato em PDF</h3>
@@ -335,6 +395,7 @@ const defaults = () => ({
 
 let state;
 try { state = JSON.parse(localStorage.getItem(KEY)) || defaults(); } catch { state = defaults(); }
+state.subs ||= []; // assinaturas (dados antigos não tinham)
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {} };
 
 const now = new Date();
@@ -347,6 +408,7 @@ const signed = t => t.type === 'pagamento' ? -t.amount : t.amount;
 const find = (list, id) => list.find(x => x.id === id) || { name: '(removido)', color: '#94a3b8' };
 
 function render() {
+  ensureSubs();
   const label = new Date(view.y, view.m, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
   $('#monthLabel').textContent = label[0].toUpperCase() + label.slice(1);
 
@@ -363,6 +425,10 @@ function render() {
   const plural = (n, s, p) => `${n} ${n === 1 ? s : p}`;
   $('#cardsCount').textContent = plural(state.cards.length, 'cadastrado', 'cadastrados');
   $('#catsCount').textContent = plural(state.cats.length, 'cadastrada', 'cadastradas');
+  const activeSubs = state.subs.filter(s => s.active);
+  $('#subsCount').textContent = activeSubs.length
+    ? `${plural(activeSubs.length, 'ativa', 'ativas')} · ${brl(activeSubs.reduce((s, x) => s + x.amount, 0))}/mês`
+    : 'Nenhuma cadastrada';
 
   renderChart(txs);
   renderList(txs);
@@ -415,7 +481,7 @@ function renderList(txs) {
     return `<li>
       <span class="dot" style="background:${k.color}"></span>
       <div class="info" data-edit="${t.id}" style="cursor:pointer">
-        <div class="desc">${esc(t.desc)}${t.inst ? `<span class="badge">${t.inst.n}/${t.inst.of}</span>` : ''}</div>
+        <div class="desc">${esc(t.desc)}${t.inst ? `<span class="badge">${t.inst.n}/${t.inst.of}</span>` : ''}${t.sub ? '<span class="badge sub">assinatura</span>' : ''}</div>
         <div class="meta">${d} · ${esc(c.name)} · ${esc(k.name)}</div>
       </div>
       <span class="amt ${t.type}">${t.type === 'pagamento' ? '−' : '+'} ${brl(t.amount)}</span>
@@ -432,7 +498,7 @@ const ICON_DEL = '<svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l
 
 // ---------- parcelas ----------
 // Cada parcela é um lançamento próprio no seu mês, com t.inst = { id (da compra), n (nº da parcela), of (total) }
-const txLabel = t => t.inst ? `${t.desc} (${t.inst.n}/${t.inst.of})` : t.desc;
+const txLabel = t => t.inst ? `${t.desc} (${t.inst.n}/${t.inst.of})` : t.sub ? `${t.desc} (assinatura)` : t.desc;
 const siblings = t => t.inst ? state.tx.filter(x => x.inst?.id === t.inst.id) : [t];
 const shortMonth = d => { const [y, m] = d.split('-'); return `${['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][m - 1]}/${y}`; };
 
@@ -512,10 +578,12 @@ function openTx(t) {
   if (!t) txForm.desc.focus();
 }
 
-function parseAmount() {
-  const raw = txForm.amount.value.trim().replace(/\./g, '').replace(',', '.');
+// aceita "100", "100,50" e "1.250,90"
+function parseMoney(str) {
+  const raw = str.trim().replace(/\./g, '').replace(',', '.');
   return Math.round(parseFloat(raw) * 100) / 100;
 }
+const parseAmount = () => parseMoney(txForm.amount.value);
 
 function updateInstUI() {
   const editingInst = editingId && state.tx.find(t => t.id === editingId)?.inst;
@@ -632,6 +700,134 @@ $('#manageAdd').onclick = () => {
 $('#manageName').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('#manageAdd').click(); } });
 $('#manageCards').onclick = () => openManage('cards');
 $('#manageCats').onclick = () => openManage('cats');
+
+// ---------- assinaturas ----------
+// Cada assinatura vira um lançamento normal por mês (t.sub = id da assinatura).
+// s.gen guarda os meses já lançados, para não lançar de novo um mês cuja cobrança o usuário apagou.
+const keyOf = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+const nowKey = () => keyOf(new Date());
+const nextKey = k => addMonths(`${k}-01`, 1).slice(0, 7);
+const subDate = (k, day) => {
+  const [y, m] = k.split('-').map(Number);
+  return `${k}-${String(Math.min(day, new Date(y, m, 0).getDate())).padStart(2, '0')}`;
+};
+
+// lança as cobranças que faltam, até o mês atual (ou até o mês que está sendo visto, para mostrar a previsão)
+function ensureSubs() {
+  const limit = [nowKey(), monthKey()].sort().pop();
+  let changed = false;
+  for (const s of state.subs) {
+    if (!s.active || !/^\d{4}-\d{2}$/.test(s.start)) continue;
+    for (let k = s.start; k <= limit; k = nextKey(k)) {
+      if (s.gen.includes(k)) continue;
+      s.gen.push(k);
+      state.tx.push({
+        id: uid(), created: Date.now(), desc: s.desc, amount: s.amount, date: subDate(k, s.day),
+        type: 'gasto', card: s.card, cat: s.cat, sub: s.id,
+      });
+      changed = true;
+    }
+  }
+  if (changed) save();
+}
+
+// tira as cobranças de meses futuros (a do mês atual fica) e libera esses meses
+function dropFutureCharges(s) {
+  const nk = nowKey();
+  state.tx = state.tx.filter(t => !(t.sub === s.id && t.date.slice(0, 7) > nk));
+  s.gen = s.gen.filter(k => k <= nk);
+}
+
+const subsDialog = $('#subsDialog'), subDialog = $('#subDialog'), subForm = $('#subForm');
+let editingSub = null;
+
+function renderSubs() {
+  const total = state.subs.filter(s => s.active).reduce((s, x) => s + x.amount, 0);
+  $('#subsTotal').innerHTML = state.subs.length ? `Total por mês das ativas: <b>${brl(total)}</b>` : '';
+  $('#subsList').innerHTML = state.subs.length ? [...state.subs]
+    .sort((a, b) => b.active - a.active || a.desc.localeCompare(b.desc))
+    .map(s => {
+      const k = find(state.cats, s.cat), c = find(state.cards, s.card);
+      return `<div class="sub-row ${s.active ? '' : 'off'}" data-id="${s.id}">
+        <span class="dot" style="background:${k.color}"></span>
+        <div class="info"><b>${esc(s.desc)}</b>
+          <small>${brl(s.amount)}/mês · dia ${s.day} · ${esc(c.name)}${s.active ? '' : ' · pausada'}</small></div>
+        <label class="switch" title="${s.active ? 'Pausar' : 'Reativar'}">
+          <input type="checkbox" data-subtoggle ${s.active ? 'checked' : ''} aria-label="Assinatura ativa"><span></span></label>
+        <button type="button" class="icon-btn" data-subedit aria-label="Editar" title="Editar">${ICON_EDIT}</button>
+        <button type="button" class="icon-btn danger" data-subdel aria-label="Excluir" title="Excluir">${ICON_DEL}</button>
+      </div>`;
+    }).join('') : '<div class="empty">Nenhuma assinatura ainda.</div>';
+}
+
+function openSub(s) {
+  editingSub = s ? s.id : null;
+  $('#subTitle').textContent = s ? 'Editar assinatura' : 'Nova assinatura';
+  subForm.card.innerHTML = state.cards.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  subForm.cat.innerHTML = state.cats.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  subForm.day.innerHTML = Array.from({ length: 31 }, (_, i) => `<option value="${i + 1}">Dia ${i + 1}</option>`).join('');
+  subForm.desc.value = s ? s.desc : '';
+  subForm.amount.value = s ? String(s.amount).replace('.', ',') : '';
+  subForm.day.value = String(s ? s.day : new Date().getDate());
+  subForm.card.value = s ? s.card : (state.lastCard || state.cards[0]?.id);
+  subForm.cat.value = s ? s.cat : (state.cats.find(c => /assinatura|lazer/i.test(c.name)) || state.cats[0]).id;
+  subForm.start.value = s ? s.start : nowKey();
+  $('#subHint').textContent = s
+    ? 'As mudanças valem para a cobrança deste mês e as próximas. Meses anteriores ficam como estão.'
+    : 'Se começou num mês anterior, as cobranças desses meses também são lançadas.';
+  subDialog.showModal();
+  if (!s) subForm.desc.focus();
+}
+
+subForm.addEventListener('submit', e => {
+  const amount = parseMoney(subForm.amount.value);
+  if (!(amount > 0)) { e.preventDefault(); subForm.amount.setCustomValidity('Valor inválido'); subForm.amount.reportValidity(); return; }
+  const start = subForm.start.value.trim();
+  if (!/^\d{4}-\d{2}$/.test(start)) { e.preventDefault(); subForm.start.setCustomValidity('Use o formato AAAA-MM'); subForm.start.reportValidity(); return; }
+  const data = { desc: subForm.desc.value.trim(), amount, day: +subForm.day.value, card: subForm.card.value, cat: subForm.cat.value, start };
+  if (editingSub) {
+    const s = state.subs.find(x => x.id === editingSub);
+    Object.assign(s, data);
+    // cobranças de antes do (novo) início saem; deste mês em diante passam a usar os dados novos
+    state.tx = state.tx.filter(t => !(t.sub === s.id && t.date.slice(0, 7) < start));
+    s.gen = s.gen.filter(k => k >= start);
+    const nk = nowKey();
+    state.tx.forEach(t => {
+      if (t.sub === s.id && t.date.slice(0, 7) >= nk) {
+        Object.assign(t, { desc: s.desc, amount: s.amount, card: s.card, cat: s.cat, date: subDate(t.date.slice(0, 7), s.day) });
+      }
+    });
+  } else state.subs.push({ id: uid(), active: true, gen: [], ...data });
+  save(); render(); renderSubs();
+});
+['amount', 'start'].forEach(n => subForm[n].addEventListener('input', () => subForm[n].setCustomValidity('')));
+$('#subCancel').onclick = () => subDialog.close();
+$('#subNew').onclick = () => openSub();
+$('#manageSubs').onclick = () => { renderSubs(); subsDialog.showModal(); };
+
+$('#subsList').addEventListener('click', e => {
+  const s = state.subs.find(x => x.id === e.target.closest('[data-id]')?.dataset.id); if (!s) return;
+  if (e.target.closest('[data-subedit]')) openSub(s);
+  else if (e.target.closest('[data-subdel]')) {
+    if (!confirm(`Excluir a assinatura "${s.desc}"?\n\nAs cobranças até este mês continuam no histórico; as de meses futuros são removidas.`)) return;
+    dropFutureCharges(s);
+    state.subs = state.subs.filter(x => x.id !== s.id);
+    save(); render(); renderSubs();
+  }
+});
+$('#subsList').addEventListener('change', e => {
+  if (!e.target.matches('[data-subtoggle]')) return;
+  const s = state.subs.find(x => x.id === e.target.closest('[data-id]').dataset.id);
+  if (e.target.checked) {
+    s.active = true;
+    // volta a cobrar a partir deste mês: os meses em que ficou pausada não são lançados
+    for (let k = s.start; k < nowKey(); k = nextKey(k)) if (!s.gen.includes(k)) s.gen.push(k);
+  } else {
+    s.active = false;
+    dropFutureCharges(s);
+  }
+  save(); render(); renderSubs();
+});
 
 // ---------- tema ----------
 function applyTheme(t) {
@@ -778,7 +974,7 @@ function buildStatement(keys, catId = null) {
   }
 
   const payload = {
-    v: 1, app: 'gastos-do-mes', cards: state.cards, cats: state.cats,
+    v: 1, app: 'gastos-do-mes', cards: state.cards, cats: state.cats, subs: state.subs,
     tx: state.tx.filter(inScope),
   };
   doc.setProperties({
@@ -857,8 +1053,8 @@ async function readImportFile(f) {
 // Junta os dados importados com os atuais: lançamentos com o mesmo id são atualizados,
 // os outros são adicionados. Nada que já existe é apagado.
 function mergeImport(d) {
-  for (const key of ['cards', 'cats']) {
-    for (const item of d[key]) if (!state[key].some(x => x.id === item.id)) state[key].push(item);
+  for (const key of ['cards', 'cats', 'subs']) {
+    for (const item of d[key] || []) if (!state[key].some(x => x.id === item.id)) state[key].push(item);
   }
   for (const t of d.tx) {
     const i = state.tx.findIndex(x => x.id === t.id);

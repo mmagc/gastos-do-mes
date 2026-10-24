@@ -15,6 +15,7 @@ PWA (Progressive Web App) simples para controlar os gastos do mês, separados po
 | **Gastos (+)** | Cada gasto é **somado** ao total. Ex.: comprou uma camiseta de R$ 100 no cartão X → o saldo vai de R$ 0 para R$ 100. |
 | **Pagamentos / estornos (−)** | São **subtraídos** do total (ex.: um estorno, ou um pagamento parcial da fatura). |
 | **Compras parceladas** | Ao lançar um gasto, escolha de 1x a 48x. O app cria uma parcela em cada mês (mesmo dia; se o mês for mais curto, usa o último dia) e mostra a prévia antes de salvar, ex.: "10x de R$ 350,00". Dá para digitar o **total da compra** ou o **valor de cada parcela**. |
+| **Assinaturas** | Cadastre cobranças mensais (streaming, academia, celular…) com valor, dia, cartão e categoria. O app lança sozinho a cobrança de cada mês, e dá para pausar, editar ou excluir. |
 | **Gráfico** | Gráfico de rosca + barras com a divisão dos gastos por **categoria** ou por **cartão** (alternável), com valor e porcentagem. |
 | **Navegação por mês** | Setas no topo para ver meses anteriores/futuros; cada mês tem seu próprio total. |
 | **Editar / excluir** | Cada lançamento tem um botão de **lápis** (editar) e de **lixeira** (excluir). Na tela de edição também há o botão **Excluir**. |
@@ -78,6 +79,18 @@ Consequências:
 - Um gasto lançado à vista pode virar parcelado: edite e escolha o número de parcelas.
 - A 1ª parcela cai no mês da data da compra. O app não considera a data de fechamento da fatura; se a compra caiu na próxima fatura, ajuste a data.
 
+### Assinaturas
+
+Em **Configurações → Assinaturas → + Nova assinatura**, informe nome, valor por mês, dia da cobrança, cartão, categoria e o mês em que começou.
+
+- O app **lança sozinho** uma cobrança por mês (etiqueta **assinatura** na lista), do mês de início até o mês atual. Ao avançar para meses futuros, ele também mostra a previsão.
+- Se o dia não existe no mês (ex.: dia 31 em novembro), usa o último dia.
+- **Pausar** (chave liga/desliga): para de cobrar a partir do próximo mês; a cobrança do mês atual fica. Ao **reativar**, volta a cobrar a partir do mês atual, sem lançar os meses em que ficou pausada.
+- **Editar** (ex.: aumento de preço): vale para a cobrança deste mês e as próximas; meses anteriores ficam como estão.
+- **Excluir**: as cobranças até o mês atual continuam no histórico; as de meses futuros são removidas.
+- Apagar a cobrança de um mês específico (lixeira na lista) não faz ela voltar — o app lembra quais meses já lançou.
+- O extrato em PDF leva as assinaturas junto, então o **Importar** também as traz para outro aparelho.
+
 ### Como o total é calculado
 
 ```
@@ -136,6 +149,7 @@ Não há build nem framework. O gráfico é desenhado em SVG puro. A única depe
 ```
 
 - `type`: `"gasto"` (soma) ou `"pagamento"` (subtrai).
+- `sub` (só em cobranças de assinatura): id da assinatura que gerou o lançamento.
 - `inst` (só em parcelas): `{ "id": "<id da compra>", "n": 2, "of": 10 }` — parcela 2 de 10. Cada parcela é um lançamento próprio, no seu mês.
 - `date`: formato `AAAA-MM-DD`; é usada para separar os lançamentos por mês.
 
