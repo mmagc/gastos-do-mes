@@ -210,13 +210,13 @@
         <span class="tool-ic">
           <svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"/></svg>
         </span>
-        <span class="tool-txt"><b>Exportar</b><small>Salvar backup</small></span>
+        <span class="tool-txt"><b>Exportar</b><small>Extrato em PDF</small></span>
       </button>
       <button id="importBtn" class="tool">
         <span class="tool-ic">
           <svg viewBox="0 0 24 24"><path d="M12 15V3M7 8l5-5 5 5M4 20h16"/></svg>
         </span>
-        <span class="tool-txt"><b>Importar</b><small>Restaurar backup</small></span>
+        <span class="tool-txt"><b>Importar</b><small>Ler extrato PDF</small></span>
       </button>
     </div>
     <div class="theme-row">
@@ -227,7 +227,7 @@
         <button data-theme="dark">🌙 Escuro</button>
       </span>
     </div>
-    <input type="file" id="importFile" accept="application/json" hidden>
+    <input type="file" id="importFile" accept="application/pdf,.pdf,application/json,.json" hidden>
   </section>
 </main>
 
@@ -268,6 +268,21 @@
       <button type="button" class="btn primary" id="manageAdd">Adicionar</button>
     </div>
     <div class="actions"><button class="btn">Fechar</button></div>
+  </form>
+</dialog>
+
+<dialog id="exportDialog">
+  <form class="sheet" method="dialog" id="exportForm">
+    <h3>Exportar extrato em PDF</h3>
+    <p class="manage-hint">O PDF pode ser lido de volta em <b>Importar</b> para restaurar os lançamentos.</p>
+    <div class="type-toggle">
+      <label><input type="radio" name="period" value="month" checked><span id="exportMonthLabel">Este mês</span></label>
+      <label><input type="radio" name="period" value="all"><span>Todos os meses</span></label>
+    </div>
+    <div class="actions">
+      <button type="button" class="btn" id="exportCancel">Cancelar</button>
+      <button type="submit" class="btn primary" id="exportGo">Gerar PDF</button>
+    </div>
   </form>
 </dialog>
 
@@ -523,22 +538,229 @@ $('#themeSeg').addEventListener('click', e => {
   applyTheme(theme);
 });
 
-// ---------- backup ----------
-$('#exportBtn').onclick = () => {
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = `gastos-backup-${new Date().toISOString().slice(0,10)}.json`;
-  a.click(); URL.revokeObjectURL(a.href);
+// ---------- extrato em PDF (exportar / importar) ----------
+// O PDF mostra o extrato legível e também leva os lançamentos embutidos
+// (nos metadados, campo Keywords, como "GASTOS1:<base64 do JSON>"),
+// para que o próprio app consiga ler o arquivo de volta no Importar.
+const PDF_LIBS = [
+  'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js',
+];
+const PDF_MARK = 'GASTOS1:';
+let pdfLibsPromise = null;
+function loadPdfLibs() {
+  const load = src => new Promise((ok, fail) => {
+    const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = fail; document.head.appendChild(s);
+  });
+  return pdfLibsPromise ||= load(PDF_LIBS[0]).then(() => load(PDF_LIBS[1])).catch(e => { pdfLibsPromise = null; throw e; });
+}
+
+const b64encode = str => { let bin = ''; new TextEncoder().encode(str).forEach(b => bin += String.fromCharCode(b)); return btoa(bin); };
+const b64decode = b64 => new TextDecoder().decode(Uint8Array.from(atob(b64), c => c.charCodeAt(0)));
+const monthTitle = key => {
+  const [y, m] = key.split('-').map(Number);
+  const s = new Date(y, m - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  return s[0].toUpperCase() + s.slice(1);
 };
+
+function buildStatement(keys) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
+  const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), M = 14;
+  const RED = [200, 16, 46], WINE = [122, 0, 25], TEXT = [42, 27, 29], MUTED = [132, 107, 110], SOFT = [253, 224, 228], GREEN = [22, 130, 60];
+  // fontes padrão do PDF não têm espaço fino nem sinal de menos tipográfico
+  const clean = s => String(s).replace(/[  ]/g, ' ').replace(/−/g, '-');
+  const money = v => clean(brl(v));
+  const minus = v => v ? `- ${money(v)}` : money(0);
+  // `right`: colunas de valores, alinhadas à direita também no cabeçalho e no total
+  const table = ({ right = [], ...opts }) => doc.autoTable({
+    theme: 'grid', margin: { left: M, right: M },
+    styles: { fontSize: 9, cellPadding: 2.2, textColor: TEXT, lineColor: [240, 226, 227], lineWidth: .2 },
+    headStyles: { fillColor: WINE, textColor: 255, fontStyle: 'bold' },
+    footStyles: { fillColor: SOFT, textColor: TEXT, fontStyle: 'bold' },
+    ...opts,
+    didParseCell: d => {
+      if (right.includes(d.column.index)) d.cell.styles.halign = 'right';
+      if (d.section === 'body' && String(d.cell.raw).startsWith('- ')) d.cell.styles.textColor = GREEN;
+    },
+  });
+  const title = (txt, y) => {
+    if (y > H - 40) { doc.addPage(); y = 20; }
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(...TEXT); doc.text(txt, M, y);
+    return y + 3;
+  };
+  const generated = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+
+  keys.forEach((key, i) => {
+    if (i) doc.addPage();
+    const txs = state.tx.filter(t => t.date.startsWith(key))
+      .sort((a, b) => a.date.localeCompare(b.date) || (a.created || 0) - (b.created || 0));
+    const total = txs.reduce((s, t) => s + signed(t), 0);
+
+    // cabeçalho
+    doc.setFillColor(...RED); doc.rect(0, 0, W, 36, 'F');
+    doc.setFillColor(...WINE); doc.rect(0, 36, W, 2, 'F');
+    doc.setTextColor(255);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.text('Extrato de Gastos', M, 15);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(11); doc.text(monthTitle(key), M, 23);
+    doc.setFontSize(8); doc.text(`Gerado em ${generated}`, M, 30);
+    doc.setFontSize(9); doc.text('Total a pagar', W - M, 14, { align: 'right' });
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(20); doc.text(money(total), W - M, 25, { align: 'right' });
+
+    // resumo por cartão / conta
+    let y = title('Resumo por cartão / conta', 48);
+    const cardRows = state.cards.map(c => {
+      const ts = txs.filter(t => t.card === c.id);
+      const g = ts.filter(t => t.type === 'gasto').reduce((s, t) => s + t.amount, 0);
+      const p = ts.filter(t => t.type === 'pagamento').reduce((s, t) => s + t.amount, 0);
+      return { name: c.name, g, p, n: ts.length };
+    }).filter(r => r.n);
+    const sumG = cardRows.reduce((s, r) => s + r.g, 0), sumP = cardRows.reduce((s, r) => s + r.p, 0);
+    table({
+      startY: y,
+      head: [['Cartão / conta', 'Gastos', 'Pagamentos / estornos', 'Saldo']],
+      body: cardRows.length ? cardRows.map(r => [r.name, money(r.g), minus(r.p), money(r.g - r.p)]) : [['Sem lançamentos neste mês', '', '', '']],
+      foot: [['Total', money(sumG), minus(sumP), money(total)]],
+      right: [1, 2, 3],
+    });
+
+    // gastos por categoria
+    y = title('Gastos por categoria', doc.lastAutoTable.finalY + 10);
+    const catRows = state.cats.map(c => ({
+      name: c.name, v: txs.filter(t => t.type === 'gasto' && t.cat === c.id).reduce((s, t) => s + t.amount, 0),
+    })).filter(r => r.v).sort((a, b) => b.v - a.v);
+    table({
+      startY: y,
+      head: [['Categoria', 'Valor', '%']],
+      body: catRows.length ? catRows.map(r => [r.name, money(r.v), `${Math.round(r.v / sumG * 100)}%`]) : [['Sem gastos neste mês', '', '']],
+      foot: [['Total de gastos', money(sumG), sumG ? '100%' : '']],
+      columnStyles: { 2: { cellWidth: 18 } }, right: [1, 2],
+    });
+
+    // lançamentos
+    y = title('Lançamentos', doc.lastAutoTable.finalY + 10);
+    table({
+      startY: y,
+      head: [['Data', 'Descrição', 'Cartão / conta', 'Categoria', 'Valor']],
+      body: txs.length ? txs.map(t => [
+        t.date.split('-').reverse().join('/'), t.desc, find(state.cards, t.card).name, find(state.cats, t.cat).name,
+        t.type === 'pagamento' ? minus(t.amount) : money(t.amount),
+      ]) : [['', 'Nenhum lançamento', '', '', '']],
+      foot: [['', '', '', 'Total a pagar', money(total)]],
+      columnStyles: { 0: { cellWidth: 22 }, 4: { cellWidth: 30 } }, right: [4],
+    });
+  });
+
+  // rodapé com paginação
+  const pages = doc.getNumberOfPages();
+  for (let p = 1; p <= pages; p++) {
+    doc.setPage(p);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...MUTED);
+    doc.text('Gastos do Mês · mmagc.github.io/gastos-do-mes', M, H - 8);
+    doc.text(`Página ${p} de ${pages}`, W - M, H - 8, { align: 'right' });
+  }
+
+  const payload = {
+    v: 1, app: 'gastos-do-mes', cards: state.cards, cats: state.cats,
+    tx: state.tx.filter(t => keys.some(k => t.date.startsWith(k))),
+  };
+  doc.setProperties({
+    title: keys.length === 1 ? `Extrato de Gastos - ${monthTitle(keys[0])}` : 'Extrato de Gastos - todos os meses',
+    subject: 'Extrato gerado pelo app Gastos do Mês', creator: 'Gastos do Mês',
+    keywords: PDF_MARK + b64encode(JSON.stringify(payload)),
+  });
+  return doc;
+}
+
+async function deliverPdf(doc, filename) {
+  const file = new File([doc.output('blob')], filename, { type: 'application/pdf' });
+  const mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (mobile && navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: filename }); return; }
+    catch (e) { if (e.name === 'AbortError') return; }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(file); a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+const exportDialog = $('#exportDialog'), exportForm = $('#exportForm');
+$('#exportBtn').onclick = () => {
+  $('#exportMonthLabel').textContent = monthTitle(monthKey());
+  exportDialog.showModal();
+  loadPdfLibs().catch(() => {}); // já vai baixando a biblioteca enquanto o usuário escolhe
+};
+$('#exportCancel').onclick = () => exportDialog.close();
+exportForm.addEventListener('submit', async e => {
+  e.preventDefault();
+  const all = exportForm.period.value === 'all';
+  const keys = all ? [...new Set(state.tx.map(t => t.date.slice(0, 7)))].sort() : [monthKey()];
+  if (!state.tx.some(t => keys.some(k => t.date.startsWith(k)))) {
+    return alert(all ? 'Ainda não há lançamentos para exportar.' : 'Não há lançamentos neste mês.');
+  }
+  const go = $('#exportGo'); go.disabled = true; go.textContent = 'Gerando…';
+  try {
+    await loadPdfLibs();
+    const doc = buildStatement(keys);
+    const today = new Date();
+    const stamp = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    exportDialog.close();
+    await deliverPdf(doc, all ? `extrato-gastos-completo-${stamp}.pdf` : `extrato-gastos-${keys[0]}.pdf`);
+  } catch (err) {
+    console.error(err);
+    alert('Não foi possível gerar o PDF. Na primeira vez é preciso estar conectado à internet.');
+  } finally { go.disabled = false; go.textContent = 'Gerar PDF'; }
+});
+
+// Lê um extrato PDF gerado pelo app (ou um backup .json antigo)
+async function readImportFile(f) {
+  const buf = await f.arrayBuffer();
+  const head = new TextDecoder('latin1').decode(buf.slice(0, 5));
+  if (head === '%PDF-') {
+    const text = new TextDecoder('latin1').decode(buf);
+    const m = text.match(/GASTOS1:([A-Za-z0-9+/=]+)/);
+    if (!m) throw new Error('pdf-sem-dados');
+    return JSON.parse(b64decode(m[1]));
+  }
+  return JSON.parse(new TextDecoder().decode(buf));
+}
+
+// Junta os dados importados com os atuais: lançamentos com o mesmo id são atualizados,
+// os outros são adicionados. Nada que já existe é apagado.
+function mergeImport(d) {
+  for (const key of ['cards', 'cats']) {
+    for (const item of d[key]) if (!state[key].some(x => x.id === item.id)) state[key].push(item);
+  }
+  for (const t of d.tx) {
+    const i = state.tx.findIndex(x => x.id === t.id);
+    if (i >= 0) state.tx[i] = t; else state.tx.push(t);
+  }
+}
+
 $('#importBtn').onclick = () => $('#importFile').click();
 $('#importFile').onchange = async e => {
-  const f = e.target.files[0]; if (!f) return;
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  let d;
   try {
-    const d = JSON.parse(await f.text());
+    d = await readImportFile(f);
     if (!Array.isArray(d.tx) || !Array.isArray(d.cards) || !Array.isArray(d.cats)) throw 0;
-    if (confirm('Substituir os dados atuais pelo backup?')) { state = d; save(); render(); }
-  } catch { alert('Arquivo de backup inválido.'); }
-  e.target.value = '';
+  } catch (err) {
+    return alert(err?.message === 'pdf-sem-dados'
+      ? 'Este PDF não foi gerado pelo app Gastos do Mês, então não dá para ler os lançamentos dele.'
+      : 'Arquivo inválido. Escolha um extrato PDF exportado por este app.');
+  }
+  if (!d.tx.length) return alert('O arquivo não tem lançamentos.');
+  const existing = d.tx.filter(t => state.tx.some(x => x.id === t.id)).length;
+  const fresh = d.tx.length - existing;
+  const months = [...new Set(d.tx.map(t => t.date.slice(0, 7)))].sort().map(monthTitle);
+  const msg = `Importar ${d.tx.length} lançamento(s) de ${months.join(', ')}?\n\n` +
+    `• ${fresh} novo(s)\n• ${existing} já existente(s) (serão atualizados)\n\nNenhum lançamento atual será apagado.`;
+  if (!confirm(msg)) return;
+  mergeImport(d);
+  const [y, m] = d.tx.map(t => t.date).sort().pop().split('-').map(Number);
+  view.y = y; view.m = m - 1;
+  save(); render();
 };
 
 render();

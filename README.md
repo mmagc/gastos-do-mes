@@ -18,7 +18,7 @@ PWA (Progressive Web App) simples para controlar os gastos do mês, separados po
 | **Navegação por mês** | Setas no topo para ver meses anteriores/futuros; cada mês tem seu próprio total. |
 | **Editar / excluir** | Cada lançamento tem um botão de **lápis** (editar) e de **lixeira** (excluir). Na tela de edição também há o botão **Excluir**. |
 | **Cartões e categorias personalizáveis** | Adicione, remova, **renomeie** e **troque a cor** de cada cartão/conta e categoria a qualquer momento. |
-| **Backup** | Exporte seus dados para um arquivo `.json` e importe de volta (útil para trocar de aparelho). |
+| **Extrato em PDF** | **Exportar** gera um extrato em PDF (do mês ou de todos os meses) com resumo por cartão, por categoria e a lista de lançamentos. **Importar** lê esse PDF de volta e restaura os lançamentos. |
 | **Funciona offline** | Graças ao service worker, o app abre mesmo sem internet. |
 | **Instalável** | Pode ser instalado na tela inicial do celular ou no computador como um app. |
 | **Tema claro/escuro** | Em Configurações → Tema: **Automático** (segue o sistema), **Claro** ou **Escuro**. A escolha fica salva no aparelho. |
@@ -52,7 +52,17 @@ Clique no ícone de instalação que aparece na barra de endereço (à direita) 
 3. **Ver para onde foi o dinheiro:** no quadro **Onde foi gasto**, alterne entre **Categoria** e **Cartão**.
 4. **Trocar de mês:** use as setas **‹** e **›** ao lado do nome do mês.
 5. **Gerenciar cartões/categorias e tema:** use a seção **Configurações** no fim da página.
-6. **Fazer backup:** **Exportar backup** baixa um arquivo `.json`; **Importar backup** substitui os dados atuais pelos do arquivo.
+6. **Extrato em PDF:** em **Exportar**, escolha **este mês** ou **todos os meses** e toque em **Gerar PDF** (no celular abre a tela de compartilhar, para salvar no Drive, enviar no WhatsApp etc.).
+7. **Importar:** escolha um extrato PDF gerado pelo app. Ele mostra quantos lançamentos são novos e quantos já existem, e só **adiciona/atualiza** — nada que já está no app é apagado.
+
+### Como o PDF é lido de volta
+
+PDFs normais não guardam os dados de forma estruturada. Por isso, ao gerar o extrato, o app também **embute os lançamentos nos metadados do próprio PDF** (campo *Keywords*, no formato `GASTOS1:<dados em base64>`). Esses dados não aparecem na página, mas viajam junto com o arquivo — e é isso que o **Importar** lê.
+
+Consequências:
+- Só dá para importar extratos **gerados por este app**. PDFs de fatura do banco não são lidos.
+- Se o PDF for editado, "impresso como PDF" de novo ou passado por algum conversor, os metadados podem se perder e o arquivo deixa de ser importável. Guarde o arquivo original.
+- Backups antigos em `.json` também continuam sendo aceitos no **Importar**.
 
 ### Como o total é calculado
 
@@ -69,8 +79,8 @@ O gráfico considera apenas os **gastos** (o que entrou na fatura), para mostrar
 Todos os dados ficam salvos **apenas no seu navegador/aparelho** (`localStorage`). Nada é enviado para servidor nenhum.
 
 Consequências importantes:
-- Os dados **não sincronizam** entre celular e computador automaticamente — use **Exportar/Importar backup** para levar de um para o outro.
-- Se você **limpar os dados do navegador** ou desinstalar o app, os lançamentos são apagados. Faça backups de vez em quando.
+- Os dados **não sincronizam** entre celular e computador automaticamente — exporte o **extrato em PDF (todos os meses)** num aparelho e use **Importar** no outro.
+- Se você **limpar os dados do navegador** ou desinstalar o app, os lançamentos são apagados. Exporte o extrato de vez em quando como backup.
 
 ---
 
@@ -87,7 +97,7 @@ gastos-do-mes/
     └── icon-512.png # Ícone grande / maskable
 ```
 
-Não há build, framework nem bibliotecas externas. O gráfico é desenhado em SVG puro.
+Não há build nem framework. O gráfico é desenhado em SVG puro. A única dependência externa é o [jsPDF](https://github.com/parallax/jsPDF) 2.5.1 + [jsPDF-AutoTable](https://github.com/simonbengtsson/jsPDF-AutoTable) 3.8.2 (via cdnjs), carregados **só quando você toca em Exportar**. Depois do primeiro uso ficam em cache e funcionam offline.
 
 ### Modelo de dados (`localStorage`, chave `gastos-mes-v1`)
 
