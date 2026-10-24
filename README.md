@@ -2,7 +2,7 @@
 
 PWA (Progressive Web App) simples para controlar os gastos do mês, separados por **categoria** e por **cartão de crédito / conta**. O número principal da tela mostra o **total a pagar somando todos os cartões e contas**, e logo abaixo um gráfico mostra onde e como o dinheiro foi gasto.
 
-🔗 **Acesse:** https://__USUARIO__.github.io/gastos-do-mes/
+🔗 **Acesse:** https://mmagc.github.io/gastos-do-mes/
 
 ---
 
