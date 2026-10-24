@@ -18,7 +18,7 @@ PWA (Progressive Web App) simples para controlar os gastos do mês, separados po
 | **Navegação por mês** | Setas no topo para ver meses anteriores/futuros; cada mês tem seu próprio total. |
 | **Editar / excluir** | Cada lançamento tem um botão de **lápis** (editar) e de **lixeira** (excluir). Na tela de edição também há o botão **Excluir**. |
 | **Cartões e categorias personalizáveis** | Adicione, remova, **renomeie** e **troque a cor** de cada cartão/conta e categoria a qualquer momento. |
-| **Extrato em PDF** | **Exportar** gera um extrato em PDF (do mês ou de todos os meses) com resumo por cartão, por categoria e a lista de lançamentos. **Importar** lê esse PDF de volta e restaura os lançamentos. |
+| **Extrato em PDF** | **Exportar** gera um extrato em PDF (do mês ou de todos os meses, de todas as categorias ou de **uma categoria só**) com resumo por cartão, por categoria e a lista de lançamentos. **Importar** lê esse PDF de volta e restaura os lançamentos. |
 | **Funciona offline** | Graças ao service worker, o app abre mesmo sem internet. |
 | **Instalável** | Pode ser instalado na tela inicial do celular ou no computador como um app. |
 | **Tema claro/escuro** | Em Configurações → Tema: **Automático** (segue o sistema), **Claro** ou **Escuro**. A escolha fica salva no aparelho. |
@@ -52,7 +52,7 @@ Clique no ícone de instalação que aparece na barra de endereço (à direita) 
 3. **Ver para onde foi o dinheiro:** no quadro **Onde foi gasto**, alterne entre **Categoria** e **Cartão**.
 4. **Trocar de mês:** use as setas **‹** e **›** ao lado do nome do mês.
 5. **Gerenciar cartões/categorias e tema:** use a seção **Configurações** no fim da página.
-6. **Extrato em PDF:** em **Exportar**, escolha **este mês** ou **todos os meses** e toque em **Gerar PDF** (no celular abre a tela de compartilhar, para salvar no Drive, enviar no WhatsApp etc.).
+6. **Extrato em PDF:** em **Exportar**, escolha **este mês** ou **todos os meses**, a **categoria** (todas ou uma só, ex.: só Alimentação) e toque em **Gerar PDF** (no celular abre a tela de compartilhar, para salvar no Drive, enviar no WhatsApp etc.).
 7. **Importar:** escolha um extrato PDF gerado pelo app. Ele mostra quantos lançamentos são novos e quantos já existem, e só **adiciona/atualiza** — nada que já está no app é apagado.
 
 ### Como o PDF é lido de volta

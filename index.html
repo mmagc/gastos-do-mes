@@ -279,6 +279,7 @@
       <label><input type="radio" name="period" value="month" checked><span id="exportMonthLabel">Este mês</span></label>
       <label><input type="radio" name="period" value="all"><span>Todos os meses</span></label>
     </div>
+    <label>Categoria<select name="cat" id="exportCat"></select></label>
     <div class="actions">
       <button type="button" class="btn" id="exportCancel">Cancelar</button>
       <button type="submit" class="btn primary" id="exportGo">Gerar PDF</button>
@@ -563,7 +564,10 @@ const monthTitle = key => {
   return s[0].toUpperCase() + s.slice(1);
 };
 
-function buildStatement(keys) {
+// catId: quando informado, o extrato traz só os lançamentos daquela categoria
+function buildStatement(keys, catId = null) {
+  const inScope = t => keys.some(k => t.date.startsWith(k)) && (!catId || t.cat === catId);
+  const catName = catId ? find(state.cats, catId).name : null;
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
   const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), M = 14;
@@ -593,7 +597,7 @@ function buildStatement(keys) {
 
   keys.forEach((key, i) => {
     if (i) doc.addPage();
-    const txs = state.tx.filter(t => t.date.startsWith(key))
+    const txs = state.tx.filter(t => t.date.startsWith(key) && inScope(t))
       .sort((a, b) => a.date.localeCompare(b.date) || (a.created || 0) - (b.created || 0));
     const total = txs.reduce((s, t) => s + signed(t), 0);
 
@@ -602,9 +606,10 @@ function buildStatement(keys) {
     doc.setFillColor(...WINE); doc.rect(0, 36, W, 2, 'F');
     doc.setTextColor(255);
     doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.text('Extrato de Gastos', M, 15);
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(11); doc.text(monthTitle(key), M, 23);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(11);
+    doc.text(catName ? `${monthTitle(key)}  ·  Categoria: ${catName}` : monthTitle(key), M, 23);
     doc.setFontSize(8); doc.text(`Gerado em ${generated}`, M, 30);
-    doc.setFontSize(9); doc.text('Total a pagar', W - M, 14, { align: 'right' });
+    doc.setFontSize(9); doc.text(catName ? `Total em ${catName}` : 'Total a pagar', W - M, 14, { align: 'right' });
     doc.setFont('helvetica', 'bold'); doc.setFontSize(20); doc.text(money(total), W - M, 25, { align: 'right' });
 
     // resumo por cartão / conta
@@ -624,18 +629,20 @@ function buildStatement(keys) {
       right: [1, 2, 3],
     });
 
-    // gastos por categoria
-    y = title('Gastos por categoria', doc.lastAutoTable.finalY + 10);
-    const catRows = state.cats.map(c => ({
-      name: c.name, v: txs.filter(t => t.type === 'gasto' && t.cat === c.id).reduce((s, t) => s + t.amount, 0),
-    })).filter(r => r.v).sort((a, b) => b.v - a.v);
-    table({
-      startY: y,
-      head: [['Categoria', 'Valor', '%']],
-      body: catRows.length ? catRows.map(r => [r.name, money(r.v), `${Math.round(r.v / sumG * 100)}%`]) : [['Sem gastos neste mês', '', '']],
-      foot: [['Total de gastos', money(sumG), sumG ? '100%' : '']],
-      columnStyles: { 2: { cellWidth: 18 } }, right: [1, 2],
-    });
+    // gastos por categoria (no extrato de uma categoria só, essa tabela seria redundante)
+    if (!catId) {
+      y = title('Gastos por categoria', doc.lastAutoTable.finalY + 10);
+      const catRows = state.cats.map(c => ({
+        name: c.name, v: txs.filter(t => t.type === 'gasto' && t.cat === c.id).reduce((s, t) => s + t.amount, 0),
+      })).filter(r => r.v).sort((a, b) => b.v - a.v);
+      table({
+        startY: y,
+        head: [['Categoria', 'Valor', '%']],
+        body: catRows.length ? catRows.map(r => [r.name, money(r.v), `${Math.round(r.v / sumG * 100)}%`]) : [['Sem gastos neste mês', '', '']],
+        foot: [['Total de gastos', money(sumG), sumG ? '100%' : '']],
+        columnStyles: { 2: { cellWidth: 18 } }, right: [1, 2],
+      });
+    }
 
     // lançamentos
     y = title('Lançamentos', doc.lastAutoTable.finalY + 10);
@@ -646,7 +653,7 @@ function buildStatement(keys) {
         t.date.split('-').reverse().join('/'), t.desc, find(state.cards, t.card).name, find(state.cats, t.cat).name,
         t.type === 'pagamento' ? minus(t.amount) : money(t.amount),
       ]) : [['', 'Nenhum lançamento', '', '', '']],
-      foot: [['', '', '', 'Total a pagar', money(total)]],
+      foot: [['', '', '', catName ? 'Total' : 'Total a pagar', money(total)]],
       columnStyles: { 0: { cellWidth: 22 }, 4: { cellWidth: 30 } }, right: [4],
     });
   });
@@ -662,10 +669,11 @@ function buildStatement(keys) {
 
   const payload = {
     v: 1, app: 'gastos-do-mes', cards: state.cards, cats: state.cats,
-    tx: state.tx.filter(t => keys.some(k => t.date.startsWith(k))),
+    tx: state.tx.filter(inScope),
   };
   doc.setProperties({
-    title: keys.length === 1 ? `Extrato de Gastos - ${monthTitle(keys[0])}` : 'Extrato de Gastos - todos os meses',
+    title: (keys.length === 1 ? `Extrato de Gastos - ${monthTitle(keys[0])}` : 'Extrato de Gastos - todos os meses') +
+      (catName ? ` - ${catName}` : ''),
     subject: 'Extrato gerado pelo app Gastos do Mês', creator: 'Gastos do Mês',
     keywords: PDF_MARK + b64encode(JSON.stringify(payload)),
   });
@@ -688,6 +696,10 @@ async function deliverPdf(doc, filename) {
 const exportDialog = $('#exportDialog'), exportForm = $('#exportForm');
 $('#exportBtn').onclick = () => {
   $('#exportMonthLabel').textContent = monthTitle(monthKey());
+  const sel = $('#exportCat'), prev = sel.value;
+  sel.innerHTML = '<option value="">Todas as categorias</option>' +
+    state.cats.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  if (state.cats.some(c => c.id === prev)) sel.value = prev;
   exportDialog.showModal();
   loadPdfLibs().catch(() => {}); // já vai baixando a biblioteca enquanto o usuário escolhe
 };
@@ -695,18 +707,24 @@ $('#exportCancel').onclick = () => exportDialog.close();
 exportForm.addEventListener('submit', async e => {
   e.preventDefault();
   const all = exportForm.period.value === 'all';
-  const keys = all ? [...new Set(state.tx.map(t => t.date.slice(0, 7)))].sort() : [monthKey()];
-  if (!state.tx.some(t => keys.some(k => t.date.startsWith(k)))) {
-    return alert(all ? 'Ainda não há lançamentos para exportar.' : 'Não há lançamentos neste mês.');
+  const catId = exportForm.cat.value || null;
+  const pool = state.tx.filter(t => !catId || t.cat === catId);
+  const keys = all ? [...new Set(pool.map(t => t.date.slice(0, 7)))].sort() : [monthKey()];
+  if (!pool.some(t => keys.some(k => t.date.startsWith(k)))) {
+    const where = catId ? ` na categoria ${find(state.cats, catId).name}` : '';
+    return alert(all ? `Ainda não há lançamentos${where} para exportar.` : `Não há lançamentos${where} neste mês.`);
   }
   const go = $('#exportGo'); go.disabled = true; go.textContent = 'Gerando…';
   try {
     await loadPdfLibs();
-    const doc = buildStatement(keys);
+    const doc = buildStatement(keys, catId);
     const today = new Date();
     const stamp = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    // nome do arquivo sem acentos/espaços, ex.: "alimentacao"
+    const slug = catId ? '-' + find(state.cats, catId).name.normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') : '';
     exportDialog.close();
-    await deliverPdf(doc, all ? `extrato-gastos-completo-${stamp}.pdf` : `extrato-gastos-${keys[0]}.pdf`);
+    await deliverPdf(doc, all ? `extrato-gastos${slug}-completo-${stamp}.pdf` : `extrato-gastos${slug}-${keys[0]}.pdf`);
   } catch (err) {
     console.error(err);
     alert('Não foi possível gerar o PDF. Na primeira vez é preciso estar conectado à internet.');
