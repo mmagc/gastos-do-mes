@@ -157,6 +157,7 @@
   .bill-hint:empty { display: none; }
   .manage-list .mcol { flex: 1; min-width: 0; display: grid; gap: 2px; }
   .manage-list .closing { font-size: 13px; padding: 4px 8px; color: var(--muted); background: var(--bg); }
+  .manage-list .cycle { font-size: 11px; color: var(--accent); padding: 0 2px; }
   #manageClosingWrap[hidden] { display: none; }
   .manage-list .rename:hover, .manage-list .rename:focus { border-color: var(--line); background: var(--bg); }
   .manage-hint { margin: -4px 0 0; color: var(--muted); font-size: 12px; }
@@ -518,15 +519,36 @@ function addMonths(date, k) {
 }
 
 // ---------- fatura (dia de fechamento do cartão) ----------
-// t.bill = mês da fatura (AAAA-MM) em que a compra entra. Compras feitas a partir do dia de
-// fechamento vão para a fatura do mês seguinte. Lançamentos antigos sem t.bill usam o mês da data.
+// t.bill = mês da fatura (AAAA-MM) em que a compra entra. Lançamentos antigos sem t.bill usam o mês da data.
+// Compras feitas a partir do dia de fechamento entram no ciclo seguinte. A fatura leva o nome do mês em que
+// fica a maior parte do ciclo:
+//   fecha dia 22 → ciclo 22/09 a 21/10 = fatura de outubro (mês do fechamento)
+//   fecha dia 3  → ciclo 03/10 a 02/11 = fatura de outubro (mês anterior ao fechamento)
+const closesInNextMonth = c => c.closing <= 15;
+const lastDay = k => { const [y, m] = k.split('-').map(Number); return new Date(y, m, 0).getDate(); };
+const prevKey = k => addMonths(`${k}-01`, -1).slice(0, 7);
+
 function billOf(cardId, date) {
   const k = date.slice(0, 7);
   const c = state.cards.find(x => x.id === cardId);
   if (!c?.closing) return k;
-  const [y, m, d] = date.split('-').map(Number);
-  return d >= Math.min(c.closing, new Date(y, m, 0).getDate()) ? nextKey(k) : k;
+  const d = +date.slice(8, 10);
+  const closeKey = d >= Math.min(c.closing, lastDay(k)) ? nextKey(k) : k; // mês em que essa fatura fecha
+  return closesInNextMonth(c) ? prevKey(closeKey) : closeKey;
 }
+
+// período de compras da fatura `bill` de um cartão: [primeiro dia, último dia] em AAAA-MM-DD
+function billCycle(c, bill) {
+  const closeKey = closesInNextMonth(c) ? nextKey(bill) : bill;
+  const close = `${closeKey}-${String(Math.min(c.closing, lastDay(closeKey))).padStart(2, '0')}`;
+  const prevClose = prevKey(closeKey);
+  const start = `${prevClose}-${String(Math.min(c.closing, lastDay(prevClose))).padStart(2, '0')}`;
+  const [y, m, d] = close.split('-').map(Number);
+  const e = new Date(y, m - 1, d - 1);
+  const end = `${e.getFullYear()}-${String(e.getMonth() + 1).padStart(2, '0')}-${String(e.getDate()).padStart(2, '0')}`;
+  return [start, end];
+}
+const ddmm = date => date.slice(8, 10) + '/' + date.slice(5, 7);
 const billKey = t => t.bill || t.date.slice(0, 7);
 const withBill = t => Object.assign(t, { bill: billOf(t.card, t.date) });
 
@@ -627,12 +649,12 @@ function updateInstUI() {
     (date ? `<br><small>Faturas de ${shortMonth(firstBill)} a ${shortMonth(lastBill)}, uma parcela por mês</small>` : '');
 }
 
-// avisa quando a compra cai na fatura do mês seguinte por causa do fechamento
+// em cartão com fechamento, mostra em qual fatura a compra entra e o período dela
 function updateBillHint() {
   const date = txForm.date.value, c = state.cards.find(x => x.id === txForm.card.value);
-  const bill = date && billOf(txForm.card.value, date);
-  $('#billHint').textContent = bill && bill !== date.slice(0, 7)
-    ? `Entra na fatura de ${monthTitle(bill).toLowerCase()} (${c.name} fecha dia ${c.closing}).` : '';
+  if (!date || !c?.closing) { $('#billHint').textContent = ''; return; }
+  const bill = billOf(c.id, date), [a, b] = billCycle(c, bill);
+  $('#billHint').textContent = `Entra na fatura de ${monthTitle(bill).toLowerCase()} do ${c.name} (compras de ${ddmm(a)} a ${ddmm(b)}).`;
 }
 ['input', 'change'].forEach(ev => txForm.addEventListener(ev, e => {
   if (['amount', 'parcelas', 'valmode', 'date', 'type', 'card'].includes(e.target.name)) { updateInstUI(); updateBillHint(); }
@@ -697,10 +719,18 @@ function openManage(key) {
 const closingOptions = sel => '<option value="">Sem fechamento (conta/débito)</option>' +
   Array.from({ length: 31 }, (_, i) => `<option value="${i + 1}" ${sel === i + 1 ? 'selected' : ''}>Fecha dia ${i + 1}</option>`).join('');
 
+// ex.: "Fatura atual (outubro): compras de 03/10 a 02/11"
+function cycleText(c) {
+  const t = new Date();
+  const today = `${keyOf(t)}-${String(t.getDate()).padStart(2, '0')}`;
+  const bill = billOf(c.id, today), [a, b] = billCycle(c, bill);
+  return `Fatura atual (${monthTitle(bill).split(' ')[0].toLowerCase()}): compras de ${ddmm(a)} a ${ddmm(b)}`;
+}
+
 function renderManage() {
   const cards = manageKey === 'cards';
   $('#manageHint').textContent = cards
-    ? 'Toque na cor para trocá-la e no nome para renomear. No dia de fechamento, compras feitas a partir desse dia entram na fatura do mês seguinte.'
+    ? 'Toque na cor para trocá-la e no nome para renomear. Compras feitas a partir do dia de fechamento entram na próxima fatura; abaixo de cada cartão aparece o período da fatura atual.'
     : 'Toque na cor para trocá-la e no nome para renomear.';
   $('#manageClosingWrap').hidden = !cards;
   $('#manageList').innerHTML = state[manageKey].map(x => `
@@ -709,6 +739,7 @@ function renderManage() {
       <div class="mcol">
         <input class="rename" value="${esc(x.name)}" aria-label="Nome" title="Toque para renomear">
         ${cards ? `<select class="closing" aria-label="Dia de fechamento da fatura">${closingOptions(x.closing)}</select>` : ''}
+        ${cards && x.closing ? `<small class="cycle">${cycleText(x)}</small>` : ''}
       </div>
       <button type="button" class="icon-btn danger" data-rm="${x.id}" aria-label="Remover" title="Remover">${ICON_DEL}</button>
     </div>`).join('');
@@ -726,7 +757,7 @@ $('#manageList').addEventListener('change', e => {
     const it = manageItem(e.target); if (!it) return;
     it.closing = e.target.value ? +e.target.value : null;
     rebillCard(it.id);
-    save(); render(); return;
+    save(); render(); renderManage(); return;
   }
   if (!e.target.matches('.rename')) return;
   const it = manageItem(e.target); if (!it) return;
@@ -1144,6 +1175,12 @@ $('#importFile').onchange = async e => {
   view.y = y; view.m = m - 1;
   save(); render();
 };
+
+// regra da fatura v2 (fechamento até dia 15 = fatura do mês anterior): recalcula o que foi salvo com a v1
+if (state.billRule !== 2) {
+  state.tx.forEach(t => { if (t.bill) withBill(t); });
+  state.billRule = 2; save();
+}
 
 render();
 

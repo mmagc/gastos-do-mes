@@ -16,7 +16,7 @@ PWA (Progressive Web App) simples para controlar os gastos do mês, separados po
 | **Pagamentos / estornos (−)** | São **subtraídos** do total (ex.: um estorno, ou um pagamento parcial da fatura). |
 | **Compras parceladas** | Ao lançar um gasto, escolha de 1x a 48x. O app cria uma parcela em cada mês (mesmo dia; se o mês for mais curto, usa o último dia) e mostra a prévia antes de salvar, ex.: "10x de R$ 350,00". Dá para digitar o **total da compra** ou o **valor de cada parcela**. |
 | **Assinaturas** | Cadastre cobranças mensais (streaming, academia, celular…) com valor, dia, cartão e categoria. O app lança sozinho a cobrança de cada mês, e dá para pausar, editar ou excluir. |
-| **Fechamento da fatura** | Cada cartão pode ter um dia de fechamento. Compras feitas a partir desse dia entram automaticamente na fatura do mês seguinte (parcelas e assinaturas também). |
+| **Fechamento da fatura** | Cada cartão pode ter um dia de fechamento. Cada compra entra automaticamente na fatura certa (parcelas e assinaturas também), e a tela de cartões mostra o período da fatura atual. |
 | **Gráfico** | Gráfico de rosca + barras com a divisão dos gastos por **categoria** ou por **cartão** (alternável), com valor e porcentagem. |
 | **Navegação por mês** | Setas no topo para ver meses anteriores/futuros; cada mês tem seu próprio total. |
 | **Editar / excluir** | Cada lançamento tem um botão de **lápis** (editar) e de **lixeira** (excluir). Na tela de edição também há o botão **Excluir**. |
@@ -96,9 +96,18 @@ Em **Configurações → Assinaturas → + Nova assinatura**, informe nome, valo
 
 Em **Configurações → Cartões**, cada cartão tem um campo **Fecha dia N** (ou **Sem fechamento** para conta corrente/débito). Também dá para escolher ao adicionar um cartão novo.
 
-- Compra feita **antes** do dia de fechamento → entra na fatura do próprio mês.
-- Compra feita **no dia do fechamento ou depois** → entra na fatura do **mês seguinte**.
-- Ao lançar, o app avisa: *"Entra na fatura de novembro (Nubank fecha dia 20)"*, e depois de salvar já mostra aquele mês.
+- Compras feitas **no dia do fechamento ou depois** entram na **próxima fatura**.
+- A fatura leva o nome do mês em que fica **a maior parte do período** de compras dela:
+
+  | Fechamento | Período de compras | Fatura de |
+  |---|---|---|
+  | Dia **22** (fecha 22/10) | 22/09 a 21/10 | **outubro** (mês do fechamento) |
+  | Dia **3** (fecha 03/11) | 03/10 a 02/11 | **outubro** (mês anterior ao fechamento) |
+
+  Regra: fechamento **até o dia 15** → a fatura conta como do mês anterior ao fechamento; **do dia 16 em diante** → do próprio mês do fechamento.
+- Exemplo: comprando em 24/10, no cartão que fecha dia 22 a compra vai para **novembro**; no cartão que fecha dia 3 ela fica em **outubro**.
+- Na tela de cartões, abaixo de cada um aparece o período da fatura atual (ex.: *"Fatura atual (outubro): compras de 03/10 a 02/11"*). Se no seu banco a compra do próprio dia de fechamento ainda entra na fatura atual, escolha o dia seguinte como fechamento.
+- Ao lançar, o app avisa: *"Entra na fatura de outubro do Cartão 2 (compras de 03/10 a 02/11)"*, e depois de salvar já mostra aquele mês.
 - O "mês" do app, para cartões com fechamento, é o mês da **fatura** — o total do topo é o valor daquela fatura. A lista continua mostrando a data real da compra.
 - Ao configurar ou mudar o fechamento de um cartão, as compras dele **do mês passado em diante** são recalculadas; faturas mais antigas ficam como estão.
 - Se o fechamento for num dia que o mês não tem (ex.: 30 em fevereiro), vale o último dia do mês.
