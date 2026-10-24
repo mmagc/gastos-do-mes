@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gastos do Mês</title>
+<meta name="theme-color" content="#4f46e5">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<style>
+  :root {
+    --bg: #f4f5fb; --card: #ffffff; --text: #1b1d2a; --muted: #6b7083;
+    --line: #e4e6f0; --accent: #4f46e5; --accent-2: #6366f1;
+    --pos: #dc2626; --neg: #16a34a; --shadow: 0 2px 10px rgba(20,20,60,.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1117; --card: #1a1d27; --text: #eceef6; --muted: #9096ab;
+      --line: #2a2e3c; --accent: #818cf8; --accent-2: #6366f1;
+      --pos: #f87171; --neg: #4ade80; --shadow: none;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding-bottom: calc(90px + env(safe-area-inset-bottom));
+  }
+  main { max-width: 640px; margin: 0 auto; padding: 16px; }
+  header.hero {
+    background: linear-gradient(135deg, var(--accent-2), #7c3aed);
+    color: #fff; border-radius: 20px; padding: 20px; box-shadow: var(--shadow);
+  }
+  .month-nav { display: flex; align-items: center; justify-content: space-between; }
+  .month-nav button {
+    background: rgba(255,255,255,.18); border: 0; color: #fff; width: 36px; height: 36px;
+    border-radius: 50%; font-size: 18px; cursor: pointer;
+  }
+  .month-nav strong { font-size: 16px; }
+  .saldo-label { margin-top: 18px; opacity: .85; font-size: 13px; }
+  .saldo { font-size: 38px; font-weight: 700; letter-spacing: -.5px; font-variant-numeric: tabular-nums; }
+  .chips { display: flex; gap: 8px; overflow-x: auto; margin-top: 14px; padding-bottom: 2px; }
+  .chip {
+    flex: 0 0 auto; background: rgba(255,255,255,.16); border-radius: 12px; padding: 8px 12px;
+    font-size: 12px; white-space: nowrap;
+  }
+  .chip b { display: block; font-size: 14px; font-variant-numeric: tabular-nums; }
+  section.box {
+    background: var(--card); border-radius: 18px; padding: 16px; margin-top: 16px; box-shadow: var(--shadow);
+  }
+  section.box h2 { margin: 0 0 12px; font-size: 16px; display: flex; justify-content: space-between; align-items: center; }
+  .seg { display: inline-flex; background: var(--bg); border-radius: 10px; padding: 3px; }
+  .seg button {
+    border: 0; background: transparent; color: var(--muted); padding: 6px 12px; border-radius: 8px;
+    font: inherit; font-size: 13px; cursor: pointer;
+  }
+  .seg button.on { background: var(--card); color: var(--text); box-shadow: var(--shadow); font-weight: 600; }
+  .chart { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; justify-content: center; }
+  .chart svg { width: 160px; height: 160px; flex: 0 0 auto; }
+  .legend { flex: 1 1 200px; min-width: 0; }
+  .legend .row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .legend .row:last-child { border-bottom: 0; }
+  .dot { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
+  .legend .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .legend .val { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .legend .pct { color: var(--muted); font-size: 12px; width: 42px; text-align: right; }
+  .bar { height: 6px; background: var(--bg); border-radius: 4px; margin-top: 4px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; border-radius: 4px; }
+  .empty { color: var(--muted); text-align: center; padding: 18px 0; }
+  ul.tx { list-style: none; margin: 0; padding: 0; }
+  ul.tx li { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  ul.tx li:last-child { border-bottom: 0; }
+  .tx .info { flex: 1; min-width: 0; }
+  .tx .desc { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tx .meta { color: var(--muted); font-size: 12px; }
+  .tx .amt { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tx .amt.gasto { color: var(--pos); }
+  .tx .amt.pagamento { color: var(--neg); }
+  .icon-btn { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 18px; padding: 4px 6px; }
+  .fab {
+    position: fixed; right: 20px; bottom: calc(20px + env(safe-area-inset-bottom));
+    width: 60px; height: 60px; border-radius: 50%; border: 0; background: var(--accent-2); color: #fff;
+    font-size: 30px; box-shadow: 0 6px 20px rgba(79,70,229,.45); cursor: pointer;
+  }
+  dialog {
+    border: 0; border-radius: 20px; padding: 0; width: min(520px, calc(100vw - 32px));
+    background: var(--card); color: var(--text);
+  }
+  dialog::backdrop { background: rgba(0,0,0,.45); }
+  form.sheet { padding: 20px; display: grid; gap: 12px; }
+  form.sheet h3 { margin: 0; }
+  label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+  input, select {
+    font: inherit; font-size: 16px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--text); width: 100%;
+  }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 4px; }
+  .btn { font: inherit; border: 0; border-radius: 10px; padding: 10px 16px; cursor: pointer; background: var(--bg); color: var(--text); }
+  .btn.primary { background: var(--accent-2); color: #fff; font-weight: 600; }
+  .type-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .type-toggle input { display: none; }
+  .type-toggle span {
+    display: block; text-align: center; padding: 10px; border-radius: 10px; border: 1px solid var(--line);
+    cursor: pointer; color: var(--text); font-size: 14px;
+  }
+  .type-toggle input:checked + span { border-color: var(--accent); background: var(--bg); font-weight: 600; }
+  .manage-list { display: grid; gap: 6px; max-height: 240px; overflow: auto; }
+  .manage-list div { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
+  .manage-list div span { flex: 1; }
+  .add-inline { display: flex; gap: 8px; }
+  .add-inline input[type=color] { width: 48px; padding: 4px; flex: 0 0 auto; }
+  .links { display: flex; gap: 10px; justify-content: center; margin-top: 16px; flex-wrap: wrap; }
+  .links button { background: none; border: 0; color: var(--accent); font: inherit; cursor: pointer; }
+</style>
+</head>
+<body>
+<main>
+  <header class="hero">
+    <div class="month-nav">
+      <button id="prevM" aria-label="Mês anterior">‹</button>
+      <strong id="monthLabel"></strong>
+      <button id="nextM" aria-label="Próximo mês">›</button>
+    </div>
+    <div class="saldo-label">Total a pagar (todos os cartões/contas)</div>
+    <div class="saldo" id="saldo">R$ 0,00</div>
+    <div class="chips" id="cardChips"></div>
+  </header>
+
+  <section class="box">
+    <h2>Onde foi gasto
+      <span class="seg" id="chartSeg">
+        <button data-by="cat" class="on">Categoria</button>
+        <button data-by="card">Cartão</button>
+      </span>
+    </h2>
+    <div class="chart" id="chart"></div>
+  </section>
+
+  <section class="box">
+    <h2>Lançamentos</h2>
+    <ul class="tx" id="txList"></ul>
+  </section>
+
+  <div class="links">
+    <button id="manageCards">Gerenciar cartões/contas</button>
+    <button id="manageCats">Gerenciar categorias</button>
+    <button id="exportBtn">Exportar backup</button>
+    <button id="importBtn">Importar backup</button>
+    <input type="file" id="importFile" accept="application/json" hidden>
+  </div>
+</main>
+
+<button class="fab" id="addBtn" aria-label="Adicionar lançamento">+</button>
+
+<dialog id="txDialog">
+  <form class="sheet" method="dialog" id="txForm">
+    <h3 id="txTitle">Novo lançamento</h3>
+    <div class="type-toggle">
+      <label><input type="radio" name="type" value="gasto" checked><span>➕ Gasto</span></label>
+      <label><input type="radio" name="type" value="pagamento"><span>➖ Pagamento/Estorno</span></label>
+    </div>
+    <label>Descrição<input name="desc" required placeholder="Ex.: Camiseta"></label>
+    <div class="row2">
+      <label>Valor (R$)<input name="amount" required inputmode="decimal" placeholder="100,00"></label>
+      <label>Data<input name="date" type="date" required></label>
+    </div>
+    <div class="row2">
+      <label>Cartão/Conta<select name="card" required></select></label>
+      <label>Categoria<select name="cat" required></select></label>
+    </div>
+    <div class="actions">
+      <button type="button" class="btn" id="txCancel">Cancelar</button>
+      <button type="submit" class="btn primary">Salvar</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="manageDialog">
+  <form class="sheet" method="dialog" id="manageForm">
+    <h3 id="manageTitle"></h3>
+    <div class="manage-list" id="manageList"></div>
+    <div class="add-inline">
+      <input id="manageName" placeholder="Nome">
+      <input id="manageColor" type="color" value="#6366f1">
+      <button type="button" class="btn primary" id="manageAdd">Adicionar</button>
+    </div>
+    <div class="actions"><button class="btn">Fechar</button></div>
+  </form>
+</dialog>
+
+<script>
+const PALETTE = ['#6366f1','#f59e0b','#10b981','#ef4444','#06b6d4','#a855f7','#ec4899','#84cc16','#f97316','#64748b'];
+const KEY = 'gastos-mes-v1';
+const uid = () => Math.random().toString(36).slice(2, 10);
+const brl = v => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const $ = s => document.querySelector(s);
+
+const defaults = () => ({
+  cards: [
+    { id: uid(), name: 'Nubank', color: '#8b5cf6' },
+    { id: uid(), name: 'Itaú', color: '#f97316' },
+    { id: uid(), name: 'Conta corrente', color: '#06b6d4' },
+  ],
+  cats: ['Alimentação','Roupas','Transporte','Casa','Lazer','Saúde','Outros']
+    .map((n, i) => ({ id: uid(), name: n, color: PALETTE[i] })),
+  tx: [],
+});
+
+let state;
+try { state = JSON.parse(localStorage.getItem(KEY)) || defaults(); } catch { state = defaults(); }
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {} };
+
+const now = new Date();
+let view = { y: now.getFullYear(), m: now.getMonth(), by: 'cat' };
+let editingId = null;
+
+const monthKey = () => `${view.y}-${String(view.m + 1).padStart(2, '0')}`;
+const monthTx = () => state.tx.filter(t => t.date.startsWith(monthKey()));
+const signed = t => t.type === 'pagamento' ? -t.amount : t.amount;
+const find = (list, id) => list.find(x => x.id === id) || { name: '(removido)', color: '#94a3b8' };
+
+function render() {
+  const label = new Date(view.y, view.m, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  $('#monthLabel').textContent = label[0].toUpperCase() + label.slice(1);
+
+  const txs = monthTx();
+  const total = txs.reduce((s, t) => s + signed(t), 0);
+  $('#saldo').textContent = brl(total);
+
+  // saldo por cartão
+  $('#cardChips').innerHTML = state.cards.map(c => {
+    const v = txs.filter(t => t.card === c.id).reduce((s, t) => s + signed(t), 0);
+    return `<div class="chip">${esc(c.name)}<b>${brl(v)}</b></div>`;
+  }).join('');
+
+  renderChart(txs);
+  renderList(txs);
+}
+
+function renderChart(txs) {
+  const list = view.by === 'cat' ? state.cats : state.cards;
+  const field = view.by === 'cat' ? 'cat' : 'card';
+  // gráfico considera apenas gastos (o que entrou na fatura)
+  const sums = {};
+  txs.filter(t => t.type === 'gasto').forEach(t => sums[t[field]] = (sums[t[field]] || 0) + t.amount);
+  const rows = Object.entries(sums).map(([id, v]) => ({ ...find(list, id), v })).sort((a, b) => b.v - a.v);
+  const tot = rows.reduce((s, r) => s + r.v, 0);
+
+  if (!tot) { $('#chart').innerHTML = '<div class="empty">Nenhum gasto neste mês ainda.</div>'; return; }
+
+  const R = 60, C = 2 * Math.PI * R;
+  let off = 0;
+  const arcs = rows.map(r => {
+    const len = r.v / tot * C;
+    const a = `<circle r="${R}" cx="80" cy="80" fill="none" stroke="${r.color}" stroke-width="26"
+      stroke-dasharray="${len} ${C - len}" stroke-dashoffset="${-off}" transform="rotate(-90 80 80)"/>`;
+    off += len; return a;
+  }).join('');
+
+  $('#chart').innerHTML = `
+    <svg viewBox="0 0 160 160">${arcs}
+      <text x="80" y="76" text-anchor="middle" font-size="11" fill="currentColor" opacity=".6">Gastos</text>
+      <text x="80" y="94" text-anchor="middle" font-size="14" font-weight="700" fill="currentColor">${brl(tot)}</text>
+    </svg>
+    <div class="legend">${rows.map(r => `
+      <div class="row" style="display:block">
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="dot" style="background:${r.color}"></span>
+          <span class="name">${esc(r.name)}</span>
+          <span class="val">${brl(r.v)}</span>
+          <span class="pct">${Math.round(r.v / tot * 100)}%</span>
+        </div>
+        <div class="bar"><i style="width:${r.v / tot * 100}%;background:${r.color}"></i></div>
+      </div>`).join('')}
+    </div>`;
+}
+
+function renderList(txs) {
+  const sorted = [...txs].sort((a, b) => b.date.localeCompare(a.date) || b.created - a.created);
+  if (!sorted.length) { $('#txList').innerHTML = '<li class="empty" style="display:block">Toque em + para adicionar.</li>'; return; }
+  $('#txList').innerHTML = sorted.map(t => {
+    const c = find(state.cards, t.card), k = find(state.cats, t.cat);
+    const d = t.date.split('-').reverse().slice(0, 2).join('/');
+    return `<li>
+      <span class="dot" style="background:${k.color}"></span>
+      <div class="info" data-edit="${t.id}" style="cursor:pointer">
+        <div class="desc">${esc(t.desc)}</div>
+        <div class="meta">${d} · ${esc(c.name)} · ${esc(k.name)}</div>
+      </div>
+      <span class="amt ${t.type}">${t.type === 'pagamento' ? '−' : '+'} ${brl(t.amount)}</span>
+      <button class="icon-btn" data-del="${t.id}" aria-label="Excluir">✕</button>
+    </li>`;
+  }).join('');
+}
+
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+
+// ---------- lançamento ----------
+const txDialog = $('#txDialog'), txForm = $('#txForm');
+
+function openTx(t) {
+  editingId = t ? t.id : null;
+  $('#txTitle').textContent = t ? 'Editar lançamento' : 'Novo lançamento';
+  txForm.card.innerHTML = state.cards.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  txForm.cat.innerHTML = state.cats.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  const today = new Date();
+  const inView = today.getFullYear() === view.y && today.getMonth() === view.m;
+  const defDate = inView ? `${monthKey()}-${String(today.getDate()).padStart(2, '0')}` : `${monthKey()}-01`;
+  txForm.desc.value = t ? t.desc : '';
+  txForm.amount.value = t ? String(t.amount).replace('.', ',') : '';
+  txForm.date.value = t ? t.date : defDate;
+  txForm.type.value = t ? t.type : 'gasto';
+  if (t) { txForm.card.value = t.card; txForm.cat.value = t.cat; }
+  else if (state.lastCard) txForm.card.value = state.lastCard;
+  txDialog.showModal();
+  if (!t) txForm.desc.focus();
+}
+
+txForm.addEventListener('submit', e => {
+  const raw = txForm.amount.value.trim().replace(/\./g, '').replace(',', '.');
+  const amount = Math.round(parseFloat(raw) * 100) / 100;
+  if (!(amount > 0)) { e.preventDefault(); txForm.amount.setCustomValidity('Valor inválido'); txForm.amount.reportValidity(); return; }
+  const data = {
+    desc: txForm.desc.value.trim(), amount, date: txForm.date.value,
+    type: txForm.type.value, card: txForm.card.value, cat: txForm.cat.value,
+  };
+  if (editingId) Object.assign(state.tx.find(t => t.id === editingId), data);
+  else state.tx.push({ id: uid(), created: Date.now(), ...data });
+  state.lastCard = data.card;
+  const [y, m] = data.date.split('-').map(Number);
+  view.y = y; view.m = m - 1;
+  save(); render();
+});
+txForm.amount.addEventListener('input', () => txForm.amount.setCustomValidity(''));
+$('#txCancel').onclick = () => txDialog.close();
+$('#addBtn').onclick = () => openTx();
+
+$('#txList').addEventListener('click', e => {
+  const del = e.target.closest('[data-del]'), ed = e.target.closest('[data-edit]');
+  if (del && confirm('Excluir este lançamento?')) {
+    state.tx = state.tx.filter(t => t.id !== del.dataset.del); save(); render();
+  } else if (ed) openTx(state.tx.find(t => t.id === ed.dataset.edit));
+});
+
+// ---------- navegação ----------
+$('#prevM').onclick = () => { view.m--; if (view.m < 0) { view.m = 11; view.y--; } render(); };
+$('#nextM').onclick = () => { view.m++; if (view.m > 11) { view.m = 0; view.y++; } render(); };
+$('#chartSeg').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  view.by = b.dataset.by;
+  document.querySelectorAll('#chartSeg button').forEach(x => x.classList.toggle('on', x === b));
+  render();
+});
+
+// ---------- gerenciar cartões / categorias ----------
+let manageKey = 'cards';
+function openManage(key) {
+  manageKey = key;
+  $('#manageTitle').textContent = key === 'cards' ? 'Cartões e contas' : 'Categorias';
+  $('#manageColor').value = PALETTE[state[key].length % PALETTE.length];
+  renderManage(); $('#manageDialog').showModal();
+}
+function renderManage() {
+  $('#manageList').innerHTML = state[manageKey].map(x => `
+    <div><span class="dot" style="background:${x.color}"></span><span>${esc(x.name)}</span>
+    <button type="button" class="icon-btn" data-rm="${x.id}" aria-label="Remover">✕</button></div>`).join('');
+}
+$('#manageList').addEventListener('click', e => {
+  const b = e.target.closest('[data-rm]'); if (!b) return;
+  if (state[manageKey].length <= 1) return alert('Mantenha pelo menos um item.');
+  const field = manageKey === 'cards' ? 'card' : 'cat';
+  const used = state.tx.some(t => t[field] === b.dataset.rm);
+  if (used && !confirm('Há lançamentos usando este item. Remover mesmo assim?')) return;
+  state[manageKey] = state[manageKey].filter(x => x.id !== b.dataset.rm);
+  save(); renderManage(); render();
+});
+$('#manageAdd').onclick = () => {
+  const name = $('#manageName').value.trim(); if (!name) return;
+  state[manageKey].push({ id: uid(), name, color: $('#manageColor').value });
+  $('#manageName').value = '';
+  $('#manageColor').value = PALETTE[state[manageKey].length % PALETTE.length];
+  save(); renderManage(); render();
+};
+$('#manageName').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('#manageAdd').click(); } });
+$('#manageCards').onclick = () => openManage('cards');
+$('#manageCats').onclick = () => openManage('cats');
+
+// ---------- backup ----------
+$('#exportBtn').onclick = () => {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = `gastos-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.click(); URL.revokeObjectURL(a.href);
+};
+$('#importBtn').onclick = () => $('#importFile').click();
+$('#importFile').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    const d = JSON.parse(await f.text());
+    if (!Array.isArray(d.tx) || !Array.isArray(d.cards) || !Array.isArray(d.cats)) throw 0;
+    if (confirm('Substituir os dados atuais pelo backup?')) { state = d; save(); render(); }
+  } catch { alert('Arquivo de backup inválido.'); }
+  e.target.value = '';
+};
+
+render();
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
