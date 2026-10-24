@@ -21,7 +21,7 @@ PWA (Progressive Web App) simples para controlar os gastos do mês, separados po
 | **Backup** | Exporte seus dados para um arquivo `.json` e importe de volta (útil para trocar de aparelho). |
 | **Funciona offline** | Graças ao service worker, o app abre mesmo sem internet. |
 | **Instalável** | Pode ser instalado na tela inicial do celular ou no computador como um app. |
-| **Tema claro/escuro** | Segue automaticamente o tema do sistema. |
+| **Tema claro/escuro** | Em Configurações → Tema: **Automático** (segue o sistema), **Claro** ou **Escuro**. A escolha fica salva no aparelho. |
 
 ---
 
@@ -51,7 +51,7 @@ Clique no ícone de instalação que aparece na barra de endereço (à direita) 
 2. **Ver o total:** o número grande no topo é o total a pagar no mês selecionado.
 3. **Ver para onde foi o dinheiro:** no quadro **Onde foi gasto**, alterne entre **Categoria** e **Cartão**.
 4. **Trocar de mês:** use as setas **‹** e **›** ao lado do nome do mês.
-5. **Gerenciar cartões/categorias:** use os links no fim da página.
+5. **Gerenciar cartões/categorias e tema:** use a seção **Configurações** no fim da página.
 6. **Fazer backup:** **Exportar backup** baixa um arquivo `.json`; **Importar backup** substitui os dados atuais pelos do arquivo.
 
 ### Como o total é calculado

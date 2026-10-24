@@ -9,6 +9,10 @@
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<script>
+  // Aplica o tema salvo antes de desenhar a página (evita "piscar" a cor errada)
+  try { const t = localStorage.getItem('gastos-tema'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch {}
+</script>
 <style>
   :root {
     --bg: #fbf4f4; --card: #ffffff; --text: #2a1b1d; --muted: #846b6e;
@@ -16,14 +20,24 @@
     --hero-1: #d00a2a; --hero-2: #7a0019;
     --pos: #b00020; --neg: #16a34a; --shadow: 0 2px 10px rgba(60,20,20,.07);
   }
+  /* Tema escuro: automático (segue o sistema) ou forçado pelo usuário */
   @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-theme="light"]) {
       --bg: #140e0f; --card: #221819; --text: #f6ecec; --muted: #ab9093;
       --line: #3a2a2c; --accent: #ff4d6a; --accent-2: #d00a2a; --accent-soft: #3d1219;
       --hero-1: #b8001f; --hero-2: #5c0012;
       --pos: #fca5a5; --neg: #4ade80; --shadow: none;
+      color-scheme: dark;
     }
   }
+  :root[data-theme="dark"] {
+    --bg: #140e0f; --card: #221819; --text: #f6ecec; --muted: #ab9093;
+    --line: #3a2a2c; --accent: #ff4d6a; --accent-2: #d00a2a; --accent-soft: #3d1219;
+    --hero-1: #b8001f; --hero-2: #5c0012;
+    --pos: #fca5a5; --neg: #4ade80; --shadow: none;
+    color-scheme: dark;
+  }
+  :root[data-theme="light"] { color-scheme: light; }
   * { box-sizing: border-box; }
   body {
     margin: 0; background: var(--bg); color: var(--text);
@@ -129,6 +143,8 @@
   .tool-ic svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .tool-txt { display: grid; min-width: 0; }
   .tool-txt b { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .theme-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  .theme-label { font-weight: 600; font-size: 14px; }
   .tool-txt small { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 </style>
 </head>
@@ -187,6 +203,14 @@
         </span>
         <span class="tool-txt"><b>Importar</b><small>Restaurar backup</small></span>
       </button>
+    </div>
+    <div class="theme-row">
+      <span class="theme-label">Tema</span>
+      <span class="seg" id="themeSeg">
+        <button data-theme="auto">Automático</button>
+        <button data-theme="light">☀️ Claro</button>
+        <button data-theme="dark">🌙 Escuro</button>
+      </span>
     </div>
     <input type="file" id="importFile" accept="application/json" hidden>
   </section>
@@ -430,6 +454,22 @@ $('#manageAdd').onclick = () => {
 $('#manageName').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('#manageAdd').click(); } });
 $('#manageCards').onclick = () => openManage('cards');
 $('#manageCats').onclick = () => openManage('cats');
+
+// ---------- tema ----------
+function applyTheme(t) {
+  if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+  else delete document.documentElement.dataset.theme;
+  document.querySelectorAll('#themeSeg button').forEach(b => b.classList.toggle('on', b.dataset.theme === t));
+}
+let theme = 'auto';
+try { theme = localStorage.getItem('gastos-tema') || 'auto'; } catch {}
+applyTheme(theme);
+$('#themeSeg').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  theme = b.dataset.theme;
+  try { theme === 'auto' ? localStorage.removeItem('gastos-tema') : localStorage.setItem('gastos-tema', theme); } catch {}
+  applyTheme(theme);
+});
 
 // ---------- backup ----------
 $('#exportBtn').onclick = () => {
