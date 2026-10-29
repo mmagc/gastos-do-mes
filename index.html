@@ -514,8 +514,8 @@ function renderChart(txs) {
     </div>`;
 }
 
-// Lista: no modo normal mostra os 10 mais recentes do mês; "Mostrar mais" expande e abre o filtro de período
-const LIST_LIMIT = 10;
+// Lista: no modo normal mostra os 5 mais recentes do mês; "Mostrar mais" expande e abre o filtro de período
+const LIST_LIMIT = 5;
 const listUI = { open: false, from: '', to: '' };
 const byRecent = (a, b) => b.date.localeCompare(a.date) || (b.created || 0) - (a.created || 0);
 
