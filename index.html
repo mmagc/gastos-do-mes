@@ -91,6 +91,25 @@
   .tx .info { flex: 1; min-width: 0; }
   .tx .desc { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tx .meta { color: var(--muted); font-size: 12px; }
+  .list-filter { display: grid; gap: 10px; margin-bottom: 8px; padding: 12px; border-radius: 14px; background: var(--bg); }
+  .list-filter[hidden] { display: none; }
+  .list-filter input { background: var(--card); font-size: 14px; padding: 8px 8px; }
+  .quick { display: flex; gap: 6px; flex-wrap: wrap; }
+  .quick button {
+    font: inherit; font-size: 12px; padding: 6px 10px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--card); color: var(--text);
+  }
+  .quick button.on { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .filter-sum { font-size: 13px; color: var(--muted); }
+  .filter-sum b { color: var(--text); }
+  ul.tx li.month-sep {
+    display: flex; justify-content: space-between; padding: 14px 0 6px; border-bottom: 1px solid var(--line);
+    font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--muted);
+  }
+  ul.tx li.month-sep:first-child { padding-top: 2px; }
+  .list-foot { display: flex; justify-content: center; }
+  .list-foot .btn[hidden] { display: none; }
+  .btn.more { margin-top: 10px; width: 100%; background: var(--bg); color: var(--accent); font-weight: 600; }
   .badge {
     display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 6px; vertical-align: 1px;
     background: var(--accent-soft); color: var(--accent); font-size: 11px; font-weight: 700;
@@ -133,7 +152,8 @@
     font: inherit; font-size: 16px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line);
     background: var(--bg); color: var(--text); width: 100%;
   }
-  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .row2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+  .row2 input, .row2 select { min-width: 0; }
   .actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 4px; }
   .btn { font: inherit; border: 0; border-radius: 10px; padding: 10px 16px; cursor: pointer; background: var(--bg); color: var(--text); }
   .btn.primary { background: var(--accent-2); color: #fff; font-weight: 600; }
@@ -226,8 +246,22 @@
   </section>
 
   <section class="box">
-    <h2>Lançamentos</h2>
+    <h2 id="listTitle">Lançamentos</h2>
+    <div class="list-filter" id="listFilter" hidden>
+      <div class="row2">
+        <label>De<input type="month" id="fFrom"></label>
+        <label>Até<input type="month" id="fTo"></label>
+      </div>
+      <div class="quick" id="fQuick">
+        <button type="button" data-range="1">Este mês</button>
+        <button type="button" data-range="3">Últimos 3 meses</button>
+        <button type="button" data-range="6">Últimos 6 meses</button>
+        <button type="button" data-range="year">Este ano</button>
+      </div>
+      <div class="filter-sum" id="filterSum"></div>
+    </div>
     <ul class="tx" id="txList"></ul>
+    <div class="list-foot"><button type="button" class="btn more" id="listToggle" hidden></button></div>
   </section>
 
   <section class="box">
@@ -480,10 +514,76 @@ function renderChart(txs) {
     </div>`;
 }
 
-function renderList(txs) {
-  const sorted = [...txs].sort((a, b) => b.date.localeCompare(a.date) || b.created - a.created);
-  if (!sorted.length) { $('#txList').innerHTML = '<li class="empty" style="display:block">Toque em + para adicionar.</li>'; return; }
-  $('#txList').innerHTML = sorted.map(t => {
+// Lista: no modo normal mostra os 10 mais recentes do mês; "Mostrar mais" expande e abre o filtro de período
+const LIST_LIMIT = 10;
+const listUI = { open: false, from: '', to: '' };
+const byRecent = (a, b) => b.date.localeCompare(a.date) || (b.created || 0) - (a.created || 0);
+
+function renderList(monthTxs) {
+  const foot = $('#listToggle');
+  $('#listFilter').hidden = !listUI.open;
+  $('#listTitle').textContent = listUI.open ? 'Lançamentos do período' : 'Lançamentos';
+
+  if (!listUI.open) {
+    const sorted = [...monthTxs].sort(byRecent);
+    $('#txList').innerHTML = sorted.length
+      ? sorted.slice(0, LIST_LIMIT).map(txItem).join('')
+      : '<li class="empty" style="display:block">Toque em + para adicionar.</li>';
+    const rest = sorted.length - LIST_LIMIT;
+    foot.hidden = false;
+    foot.textContent = rest > 0 ? `Mostrar mais (${rest}) e filtrar por período` : 'Filtrar por período';
+    return;
+  }
+
+  // modo expandido: todos os lançamentos entre os meses escolhidos (pelo mês da fatura), agrupados por mês
+  const [from, to] = [listUI.from, listUI.to].sort();
+  const list = state.tx.filter(t => { const b = billKey(t); return b >= from && b <= to; })
+    .sort((a, b) => billKey(b).localeCompare(billKey(a)) || byRecent(a, b));
+  const gastos = list.filter(t => t.type === 'gasto').reduce((s, t) => s + t.amount, 0);
+  const total = list.reduce((s, t) => s + signed(t), 0);
+  const months = new Set(list.map(billKey)).size;
+  $('#filterSum').innerHTML = list.length
+    ? `<b>${list.length}</b> lançamento(s) em ${months} mês(es) · gastos <b>${brl(gastos)}</b> · total a pagar <b>${brl(total)}</b>`
+    : 'Nenhum lançamento nesse período.';
+  let html = '', current = null;
+  for (const t of list) {
+    const b = billKey(t);
+    if (b !== current) {
+      current = b;
+      const monthTotal = list.filter(x => billKey(x) === b).reduce((s, x) => s + signed(x), 0);
+      html += `<li class="month-sep"><span>${monthTitle(b)}</span><span>${brl(monthTotal)}</span></li>`;
+    }
+    html += txItem(t);
+  }
+  $('#txList').innerHTML = html;
+  $('#fFrom').value = from; $('#fTo').value = to;
+  foot.hidden = false; foot.textContent = 'Mostrar menos';
+}
+
+function setListRange(from, to) {
+  listUI.from = from; listUI.to = to;
+  document.querySelectorAll('#fQuick button').forEach(b => b.classList.remove('on'));
+  render();
+}
+$('#listToggle').onclick = () => {
+  listUI.open = !listUI.open;
+  if (listUI.open) { listUI.from = listUI.to = monthKey(); markQuick('1'); }
+  render();
+  if (!listUI.open) $('#listTitle').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+};
+const markQuick = r => document.querySelectorAll('#fQuick button').forEach(b => b.classList.toggle('on', b.dataset.range === r));
+['fFrom', 'fTo'].forEach(id => $('#' + id).addEventListener('change', () => {
+  const from = $('#fFrom').value, to = $('#fTo').value;
+  if (/^\d{4}-\d{2}$/.test(from) && /^\d{4}-\d{2}$/.test(to)) setListRange(from, to);
+}));
+$('#fQuick').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const end = monthKey(), r = b.dataset.range;
+  const start = r === 'year' ? `${end.slice(0, 4)}-01` : addMonths(`${end}-01`, 1 - +r).slice(0, 7);
+  setListRange(start, end); markQuick(r);
+});
+
+function txItem(t) {
     const c = find(state.cards, t.card), k = find(state.cats, t.cat);
     const d = t.date.split('-').reverse().slice(0, 2).join('/');
     return `<li>
@@ -498,7 +598,6 @@ function renderList(txs) {
         <button class="icon-btn danger" data-del="${t.id}" aria-label="Excluir" title="Excluir">${ICON_DEL}</button>
       </span>
     </li>`;
-  }).join('');
 }
 
 const ICON_EDIT = '<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4"/></svg>';
